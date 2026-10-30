@@ -1,0 +1,205 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================
+   LocaBénin — Design System (tokens)
+   Identité : confiance, chaleur, ancrage béninois.
+   • Primaire  : vert émeraude profond (confiance / drapeau)
+   • Accent    : or-ambre chaleureux (CTA secondaires, badges)
+   • Erreur    : rouge réservé aux alertes
+   • Neutres   : gris sable chauds, surfaces blanc cassé
+   • Grille 8 px · rayons 12-16 px · ombres douces multi-niveaux
+   Contrastes WCAG AA minimum · mode sombre complet.
+   ============================================================ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-sora);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
+  --color-surface: var(--surface);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+}
+
+:root {
+  --radius: 0.75rem;
+  /* Blanc cassé chaud pour les fonds, surfaces claires */
+  --background: oklch(0.977 0.008 95);
+  --foreground: oklch(0.22 0.02 150);
+  --card: oklch(0.995 0.004 95);
+  --card-foreground: oklch(0.22 0.02 150);
+  --popover: oklch(0.995 0.004 95);
+  --popover-foreground: oklch(0.22 0.02 150);
+  /* Émeraude profond */
+  --primary: oklch(0.5 0.12 158);
+  --primary-foreground: oklch(0.99 0.01 120);
+  /* Sable chaud */
+  --secondary: oklch(0.955 0.014 90);
+  --secondary-foreground: oklch(0.3 0.03 150);
+  --muted: oklch(0.955 0.014 90);
+  --muted-foreground: oklch(0.47 0.02 130);
+  /* Ambre or — CTA secondaires et badges */
+  --accent: oklch(0.83 0.13 80);
+  --accent-foreground: oklch(0.28 0.06 70);
+  --destructive: oklch(0.55 0.2 25);
+  --border: oklch(0.9 0.015 95);
+  --input: oklch(0.9 0.015 95);
+  --ring: oklch(0.5 0.12 158);
+  --chart-1: oklch(0.5 0.12 158);
+  --chart-2: oklch(0.75 0.13 80);
+  --chart-3: oklch(0.6 0.1 180);
+  --chart-4: oklch(0.7 0.15 60);
+  --chart-5: oklch(0.55 0.1 300);
+  --sidebar: oklch(0.985 0.006 100);
+  --sidebar-foreground: oklch(0.22 0.02 150);
+  --sidebar-primary: oklch(0.5 0.12 158);
+  --sidebar-primary-foreground: oklch(0.99 0.01 120);
+  --sidebar-accent: oklch(0.955 0.014 90);
+  --sidebar-accent-foreground: oklch(0.3 0.03 150);
+  --sidebar-border: oklch(0.9 0.015 95);
+  --sidebar-ring: oklch(0.5 0.12 158);
+  /* Tokens supplémentaires du design system */
+  --gold: oklch(0.72 0.14 75);
+  --gold-foreground: oklch(0.28 0.06 70);
+  --surface: oklch(0.94 0.018 95);
+}
+
+.dark {
+  --background: oklch(0.19 0.018 150);
+  --foreground: oklch(0.93 0.01 110);
+  --card: oklch(0.23 0.02 150);
+  --card-foreground: oklch(0.93 0.01 110);
+  --popover: oklch(0.23 0.02 150);
+  --popover-foreground: oklch(0.93 0.01 110);
+  --primary: oklch(0.68 0.13 158);
+  --primary-foreground: oklch(0.15 0.03 155);
+  --secondary: oklch(0.27 0.02 150);
+  --secondary-foreground: oklch(0.93 0.01 110);
+  --muted: oklch(0.27 0.02 150);
+  --muted-foreground: oklch(0.68 0.015 120);
+  --accent: oklch(0.78 0.13 80);
+  --accent-foreground: oklch(0.2 0.04 70);
+  --destructive: oklch(0.62 0.19 25);
+  --border: oklch(0.32 0.02 150);
+  --input: oklch(0.32 0.02 150);
+  --ring: oklch(0.68 0.13 158);
+  --chart-1: oklch(0.68 0.13 158);
+  --chart-2: oklch(0.78 0.13 80);
+  --chart-3: oklch(0.65 0.1 180);
+  --chart-4: oklch(0.72 0.15 60);
+  --chart-5: oklch(0.65 0.1 300);
+  --sidebar: oklch(0.21 0.02 150);
+  --sidebar-foreground: oklch(0.93 0.01 110);
+  --sidebar-primary: oklch(0.68 0.13 158);
+  --sidebar-primary-foreground: oklch(0.15 0.03 155);
+  --sidebar-accent: oklch(0.27 0.02 150);
+  --sidebar-accent-foreground: oklch(0.93 0.01 110);
+  --sidebar-border: oklch(0.32 0.02 150);
+  --sidebar-ring: oklch(0.68 0.13 158);
+  --gold: oklch(0.78 0.13 80);
+  --gold-foreground: oklch(0.2 0.04 70);
+  --surface: oklch(0.25 0.02 150);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
+  }
+  /* Focus visible net pour la navigation clavier */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 25%, transparent);
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  }
+  /* Ombres douces multi-niveaux */
+  .shadow-soft {
+    box-shadow: 0 1px 2px rgb(20 40 30 / 0.05), 0 4px 16px rgb(20 40 30 / 0.07);
+  }
+  .shadow-lift {
+    box-shadow: 0 2px 4px rgb(20 40 30 / 0.06), 0 12px 32px rgb(20 40 30 / 0.12);
+  }
+  .shadow-glow {
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 18%, transparent), 0 8px 24px color-mix(in oklch, var(--primary) 14%, transparent);
+  }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  /* Apparition progressive sobre */
+  .animate-fade-up {
+    animation: fade-up 0.25s ease-out both;
+  }
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out both;
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  /* Respect de prefers-reduced-motion */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-fade-up, .animate-fade-in {
+      animation: none;
+    }
+    * {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+  /* Scrollbar stylée pour les longues listes */
+  .styled-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+  .styled-scroll::-webkit-scrollbar-thumb { background: color-mix(in oklch, var(--muted-foreground) 30%, transparent); border-radius: 8px; }
+  .styled-scroll::-webkit-scrollbar-track { background: transparent; }
+}

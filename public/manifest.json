@@ -1,0 +1,13 @@
+{
+  "name": "LocaBénin — Location immobilière au Bénin",
+  "short_name": "LocaBénin",
+  "description": "Trouvez et louez un logement au Bénin : appartements, maisons, meublés et bureaux. Paiement Mobile Money sécurisé.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF7F2",
+  "theme_color": "#0B6B45",
+  "lang": "fr",
+  "icons": [
+    { "src": "/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

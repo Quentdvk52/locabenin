@@ -1,0 +1,840 @@
+     1→     1→// ============================================================
+     2→     2→// LocaBénin — Schéma de données
+     3→     3→// SQLite local (sandbox) — migration PostgreSQL/Supabase en production.
+     4→     4→// Conventions :
+     5→     5→//  - Montants en FCFA : TOUJOURS des entiers (Int), jamais de flottants.
+     6→     6→//  - SQLite ne supporte pas les enums Prisma ni Json :
+     7→     7→//    les énumérations métier sont des String validées par Zod côté serveur
+     8→     8→//    (constantes centralisées dans src/lib/constants.ts).
+     9→     9→//  - Soft delete (deletedAt) sur les données utilisateur importantes.
+    10→    10→//  - Le contrôle d'accès fin (IDOR) est appliqué dans les routes API :
+    11→    11→//    voir docs/DATABASE.md pour la correspondance RLS Supabase prévue.
+    12→    12→// ============================================================
+    13→    13→
+    14→    14→generator client {
+    15→    15→  provider = "prisma-client-js"
+    16→    16→}
+    17→    17→
+    18→    18→datasource db {
+    19→    19→  provider = "sqlite"
+    20→    20→  url      = env("DATABASE_URL")
+    21→    21→}
+    22→    22→
+    23→    23→// ---------- Utilisateurs, rôles, identité ----------
+    24→    24→
+    25→    25→model User {
+    26→    26→  id            String    @id @default(cuid())
+    27→    27→  phone         String?   @unique
+    28→    28→  email         String?   @unique
+    29→    29→  passwordHash  String?
+    30→    30→  fullName      String
+    31→    31→  avatarUrl     String?
+    32→    32→  whatsapp      String?
+    33→    33→  status        String    @default("ACTIVE") // ACTIVE | SUSPENDED | BANNED | DELETED
+    34→    34→  kycStatus     String    @default("NONE") // NONE | PENDING | VERIFIED | REJECTED
+    35→    35→  phoneVerified Boolean   @default(false)
+    36→    36→  emailVerified Boolean   @default(false)
+    37→    37→  language      String    @default("fr") // i18n-ready
+    38→    38→  createdAt     DateTime  @default(now())
+    39→    39→  updatedAt     DateTime  @updatedAt
+    40→    40→  deletedAt     DateTime?
+    41→    41→
+    42→    42→  userRoles     UserRole[]
+    43→    43→  kycDocuments  KycDocument[]
+    44→    44→  listings      Listing[]
+    45→    45→  properties    Property[]
+    46→    46→  leasesAsOwner Lease[]         @relation("LeaseOwner")
+    47→    47→  leasesAsTenant Lease[]        @relation("LeaseTenant")
+    48→    48→  payments      Payment[]       @relation("PaymentPayer")
+    49→    49→  favorites     Favorite[]
+    50→    50→  savedSearches SavedSearch[]
+    51→    51→  visitsRequested Visit[]       @relation("VisitTenant")
+    52→    52→  visitsHosted  Visit[]         @relation("VisitOwner")
+    53→    53→  applications  Application[]
+    54→    54→  reviews       Review[]
+    55→    55→  reportsFiled  Report[]        @relation("ReportReporter")
+    56→    56→  notifications Notification[]
+    57→    57→  ticketsCreated MaintenanceTicket[] @relation("TicketTenant")
+    58→    58→  messages      Message[]
+    59→    59→  announcements Announcement[]
+    60→    60→  affiliateLinks AffiliateLink[]
+    61→    61→  commissions   Commission[]
+    62→    62→  payouts       Payout[]
+    63→    63→  auditLogs     AuditLog[]
+    64→    64→  pushSubscriptions PushSubscription[]
+    65→    65→  conversations ConversationParticipant[]
+    66→    66→}
+    67→    67→
+    68→    68→model UserRole {
+    69→    69→  id           String   @id @default(cuid())
+    70→    70→  userId       String
+    71→    71→  role         String // OWNER | TENANT | AGENT | ADMIN
+    72→    72→  adminSubRole String? // SUPER_ADMIN | MODERATOR | SUPPORT | ACCOUNTANT (si role=ADMIN)
+    73→    73→  isDefault    Boolean  @default(false)
+    74→    74→  createdAt    DateTime @default(now())
+    75→    75→
+    76→    76→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+    77→    77→
+    78→    78→  @@unique([userId, role])
+    79→    79→  @@index([userId])
+    80→    80→}
+    81→    81→
+    82→    82→model KycDocument {
+    83→    83→  id              String    @id @default(cuid())
+    84→    84→  userId          String
+    85→    85→  kind            String // ID_CARD | PASSPORT | DRIVER_LICENSE | SELFIE
+    86→    86→  fileUrl         String
+    87→    87→  status          String    @default("PENDING") // PENDING | APPROVED | REJECTED
+    88→    88→  rejectionReason String?
+    89→    89→  reviewedById    String?
+    90→    90→  reviewedAt      DateTime?
+    91→    91→  createdAt       DateTime  @default(now())
+    92→    92→
+    93→    93→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+    94→    94→
+    95→    95→  @@index([userId])
+    96→    96→  @@index([status])
+    97→    97→}
+    98→    98→
+    99→    99→model OtpCode {
+   100→   100→  id          String    @id @default(cuid())
+   101→   101→  destination String // téléphone ou email
+   102→   102→  codeHash    String
+   103→   103→  purpose     String    @default("AUTH") // AUTH | PAYOUT | SENSITIVE
+   104→   104→  attempts    Int       @default(0)
+   105→   105→  expiresAt   DateTime
+   106→   106→  consumedAt  DateTime?
+   107→   107→  createdAt   DateTime  @default(now())
+   108→   108→
+   109→   109→  @@index([destination, purpose])
+   110→   110→}
+   111→   111→
+   112→   112→// ---------- Géographie du Bénin ----------
+   113→   113→
+   114→   114→model Department {
+   115→   115→  id       String    @id @default(cuid())
+   116→   116→  code     String    @unique
+   117→   117→  name     String
+   118→   118→  communes Commune[]
+   119→   119→}
+   120→   120→
+   121→   121→model Commune {
+   122→   122→  id           String  @id @default(cuid())
+   123→   123→  departmentId String
+   124→   124→  name         String
+   125→   125→  department   Department @relation(fields: [departmentId], references: [id])
+   126→   126→  areas        Area[]
+   127→   127→
+   128→   128→  @@unique([departmentId, name])
+   129→   129→  @@index([name])
+   130→   130→}
+   131→   131→
+   132→   132→model Area {
+   133→   133→  id        String  @id @default(cuid())
+   134→   134→  communeId String
+   135→   135→  name      String
+   136→   136→  kind      String  @default("QUARTIER") // ARRONDISSEMENT | QUARTIER
+   137→   137→  commune   Commune @relation(fields: [communeId], references: [id])
+   138→   138→  listings  Listing[]
+   139→   139→
+   140→   140→  @@unique([communeId, name])
+   141→   141→  @@index([name])
+   142→   142→}
+   143→   143→
+   144→   144→// ---------- Biens et offres ----------
+   145→   145→
+   146→   146→// Immeuble / propriété regroupant plusieurs unités (optionnel)
+   147→   147→model Property {
+   148→   148→  id          String    @id @default(cuid())
+   149→   149→  ownerId     String
+   150→   150→  name        String
+   151→   151→  addressText String?
+   152→   152→  areaId      String?
+   153→   153→  description String?
+   154→   154→  createdAt   DateTime  @default(now())
+   155→   155→  deletedAt   DateTime?
+   156→   156→
+   157→   157→  owner    User     @relation(fields: [ownerId], references: [id])
+   158→   158→  listings Listing[]
+   159→   159→
+   160→   160→  @@index([ownerId])
+   161→   161→}
+   162→   162→
+   163→   163→model Listing {
+   164→   164→  id            String    @id @default(cuid())
+   165→   165→  reference     String    @unique // LB-XXXXXX
+   166→   166→  ownerId       String
+   167→   167→  propertyId    String?
+   168→   168→  title         String
+   169→   169→  description   String
+   170→   170→  type          String // APARTMENT | HOUSE | VILLA | OFFICE | GARAGE | LAND | FIELD | ESTATE | SHOP
+   171→   171→  genre         String // SIMPLE | FURNISHED
+   172→   172→  category      String // EMPTY_HOUSING | FURNISHED | OFFICE  (dérivé du type+genre, sert aux abonnements)
+   173→   173→  status        String    @default("DRAFT") // DRAFT | PENDING_REVIEW | PUBLISHED | RESERVED | RENTED | SUSPENDED_OWNER | SUSPENDED_UNPAID | ARCHIVED
+   174→   174→  bedrooms      Int       @default(0) // 0 = studio ; -1 = chambre-salon
+   175→   175→  bathrooms     Int       @default(0) // douches
+   176→   176→  livingRooms   Int       @default(0)
+   177→   177→  surfaceM2     Int?
+   178→   178→  addressText   String?
+   179→   179→  areaId        String?
+   180→   180→  latitude      Float?
+   181→   181→  longitude     Float?
+   182→   182→  // Tarification (FCFA entiers)
+   183→   183→  rentAmount    Int       @default(0) // prix de base
+   184→   184→  rentPeriod    String    @default("MONTH") // DAY | WEEK | MONTH | QUARTER | SEMESTER | LEASE
+   185→   185→  depositAmount Int       @default(0) // caution (location simple uniquement)
+   186→   186→  advanceMonths Int       @default(0) // mois d'avance (location simple)
+   187→   187→  dailyPrice    Int? // meublé : prix / jour
+   188→   188→  weeklyPrice   Int? // meublé : prix / semaine
+   189→   189→  monthlyPrice  Int? // meublé : prix / mois
+   190→   190→  minStayDays   Int? // meublé : durée minimale
+   191→   191→  allowPartial  Boolean   @default(false) // paiement partiel du loyer autorisé
+   192→   192→  rulesText     String?
+   193→   193→  affiliateEnabled Boolean @default(false) // option Démarcheur
+   194→   194→  visitsCount   Int       @default(0)
+   195→   195→  favoritesCount Int      @default(0)
+   196→   196→  isFeatured    Boolean   @default(false)
+   197→   197→  moderationNote String?
+   198→   198→  publishedAt   DateTime?
+   199→   199→  createdAt     DateTime  @default(now())
+   200→   200→  updatedAt     DateTime  @updatedAt
+   201→   201→  deletedAt     DateTime?
+   202→   202→
+   203→   203→  owner     User     @relation(fields: [ownerId], references: [id])
+   204→   204→  property  Property? @relation(fields: [propertyId], references: [id])
+   205→   205→  area      Area?    @relation(fields: [areaId], references: [id])
+   206→   206→  media     ListingMedia[]
+   207→   207→  depositOptions DepositOption[]
+   208→   208→  amenities ListingAmenity[]
+   209→   209→  calendarBlocks CalendarBlock[]
+   210→   210→  bookings  Booking[]
+   211→   211→  visits    Visit[]
+   212→   212→  applications Application[]
+   213→   213→  leases    Lease[]
+   214→   214→  affiliateLinks AffiliateLink[]
+   215→   215→  favorites Favorite[]
+   216→   216→  reviews   Review[]
+   217→   217→  commissions Commission[]
+   218→   218→  reports   Report[]
+   219→   219→
+   220→   220→  @@index([status, genre])
+   221→   221→  @@index([status, type])
+   222→   222→  @@index([category, status])
+   223→   223→  @@index([rentAmount])
+   224→   224→  @@index([areaId])
+   225→   225→  @@index([ownerId])
+   226→   226→  @@index([isFeatured, status])
+   227→   227→}
+   228→   228→
+   229→   229→model ListingMedia {
+   230→   230→  id        String  @id @default(cuid())
+   231→   231→  listingId String
+   232→   232→  kind      String  @default("IMAGE") // IMAGE | VIDEO
+   233→   233→  url       String
+   234→   234→  thumbUrl  String?
+   235→   235→  position  Int     @default(0)
+   236→   236→  isCover   Boolean @default(false)
+   237→   237→  width     Int?
+   238→   238→  height    Int?
+   239→   239→  sizeBytes Int?
+   240→   240→
+   241→   241→  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+   242→   242→
+   243→   243→  @@index([listingId, position])
+   244→   244→}
+   245→   245→
+   246→   246→// Cautions optionnelles fixes (eau, électricité, autres libellés libres)
+   247→   247→model DepositOption {
+   248→   248→  id        String @id @default(cuid())
+   249→   249→  listingId String
+   250→   250→  label     String
+   251→   251→  amount    Int
+   252→   252→
+   253→   253→  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+   254→   254→
+   255→   255→  @@index([listingId])
+   256→   256→}
+   257→   257→
+   258→   258→model Amenity {
+   259→   259→  id    String @id @default(cuid())
+   260→   260→  code  String @unique
+   261→   261→  label String
+   262→   262→  icon  String
+   263→   263→  group String @default("CONFORT") // CONFORT | SECURITE | EXTERIEUR | SERVICES
+   264→   264→
+   265→   265→  listings ListingAmenity[]
+   266→   266→}
+   267→   267→
+   268→   268→model ListingAmenity {
+   269→   269→  listingId String
+   270→   270→  amenityId String
+   271→   271→
+   272→   272→  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+   273→   273→  amenity Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+   274→   274→
+   275→   275→  @@id([listingId, amenityId])
+   276→   276→}
+   277→   277→
+   278→   278→// Dates bloquées (calendrier de disponibilité des meublés)
+   279→   279→model CalendarBlock {
+   280→   280→  id        String   @id @default(cuid())
+   281→   281→  listingId String
+   282→   282→  startDate DateTime
+   283→   283→  endDate   DateTime
+   284→   284→  reason    String?
+   285→   285→
+   286→   286→  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+   287→   287→
+   288→   288→  @@index([listingId, startDate])
+   289→   289→}
+   290→   290→
+   291→   291→// ---------- Recherche, favoris, visites, candidatures ----------
+   292→   292→
+   293→   293→model Favorite {
+   294→   294→  userId    String
+   295→   295→  listingId String
+   296→   296→  createdAt DateTime @default(now())
+   297→   297→
+   298→   298→  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+   299→   299→  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+   300→   300→
+   301→   301→  @@id([userId, listingId])
+   302→   302→  @@index([userId])
+   303→   303→}
+   304→   304→
+   305→   305→model SavedSearch {
+   306→   306→  id            String    @id @default(cuid())
+   307→   307→  userId        String
+   308→   308→  name          String
+   309→   309→  filtersJson   String
+   310→   310→  alertsEnabled Boolean   @default(true)
+   311→   311→  lastRunAt     DateTime?
+   312→   312→  createdAt     DateTime  @default(now())
+   313→   313→
+   314→   314→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   315→   315→
+   316→   316→  @@index([userId])
+   317→   317→}
+   318→   318→
+   319→   319→model Visit {
+   320→   320→  id          String   @id @default(cuid())
+   321→   321→  listingId   String
+   322→   322→  tenantId    String
+   323→   323→  ownerId     String
+   324→   324→  scheduledAt DateTime
+   325→   325→  status      String   @default("REQUESTED") // REQUESTED | CONFIRMED | REJECTED | CANCELLED | DONE
+   326→   326→  note        String?
+   327→   327→  createdAt   DateTime @default(now())
+   328→   328→
+   329→   329→  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+   330→   330→  tenant  User    @relation("VisitTenant", fields: [tenantId], references: [id])
+   331→   331→  owner   User    @relation("VisitOwner", fields: [ownerId], references: [id])
+   332→   332→
+   333→   333→  @@index([listingId])
+   334→   334→  @@index([tenantId])
+   335→   335→  @@index([ownerId, scheduledAt])
+   336→   336→}
+   337→   337→
+   338→   338→model Application {
+   339→   339→  id          String    @id @default(cuid())
+   340→   340→  listingId   String
+   341→   341→  tenantId    String
+   342→   342→  message     String?
+   343→   343→  status      String    @default("PENDING") // PENDING | ACCEPTED | REJECTED | WITHDRAWN
+   344→   344→  affiliateLinkId String? // attribution au moment de la candidature
+   345→   345→  visitorId   String?
+   346→   346→  leaseId     String?
+   347→   347→  createdAt   DateTime  @default(now())
+   348→   348→  decidedAt   DateTime?
+   349→   349→
+   350→   350→  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+   351→   351→  tenant  User    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+   352→   352→
+   353→   353→  @@index([listingId])
+   354→   354→  @@index([tenantId])
+   355→   355→}
+   356→   356→
+   357→   357→// ---------- Baux, loyers, réservations ----------
+   358→   358→
+   359→   359→model Lease {
+   360→   360→  id          String    @id @default(cuid())
+   361→   361→  reference   String    @unique // BAIL-XXXXXX
+   362→   362→  listingId   String
+   363→   363→  ownerId     String
+   364→   364→  tenantId    String
+   365→   365→  kind        String    @default("SIMPLE") // SIMPLE | FURNISHED
+   366→   366→  bookingId   String? @unique
+   367→   367→  startDate   DateTime
+   368→   368→  endDate     DateTime?
+   369→   369→  rentAmount  Int
+   370→   370→  rentPeriod  String
+   371→   371→  depositAmount    Int  @default(0)
+   372→   372→  advanceMonths    Int  @default(0)
+   373→   373→  advancePaidAmount Int @default(0)
+   374→   374→  depositOptionsJson String? // snapshot [{label, amount}]
+   375→   375→  // Option démarcheur (snapshot au moment de la signature)
+   376→   376→  affiliateLinkId     String?
+   377→   377→  commissionTotal     Int     @default(0)
+   378→   378→  commissionTenantShare Int   @default(0)
+   379→   379→  commissionOwnerShare Int    @default(0)
+   380→   380→  status      String    @default("ACTIVE") // ACTIVE | NOTICE_GIVEN | TERMINATED | EXPIRED
+   381→   381→  noticeDate  DateTime?
+   382→   382→  allowPartial Boolean  @default(false)
+   383→   383→  contractPdfUrl  String?
+   384→   384→  contractHash    String?
+   385→   385→  ownerSignatureUrl  String?
+   386→   386→  ownerSignedAt      DateTime?
+   387→   387→  tenantSignatureUrl String?
+   388→   388→  tenantSignedAt     DateTime?
+   389→   389→  inventoryInUrl  String?
+   390→   390→  inventoryOutUrl String?
+   391→   391→  depositReturnedAmount Int     @default(0)
+   392→   392→  depositReturnedAt     DateTime?
+   393→   393→  createdAt   DateTime  @default(now())
+   394→   394→
+   395→   395→  listing Listing @relation(fields: [listingId], references: [id])
+   396→   396→  owner   User    @relation("LeaseOwner", fields: [ownerId], references: [id])
+   397→   397→  tenant  User    @relation("LeaseTenant", fields: [tenantId], references: [id])
+   398→   398→  booking Booking? @relation(fields: [bookingId], references: [id])
+   399→   399→  payments Payment[]
+   400→   400→  schedules RentSchedule[]
+   401→   401→  tickets MaintenanceTicket[]
+   402→   402→  reviews Review[]
+   403→   403→  commissions Commission[]
+   404→   404→
+   405→   405→  @@index([ownerId, status])
+   406→   406→  @@index([tenantId, status])
+   407→   407→  @@index([listingId])
+   408→   408→}
+   409→   409→
+   410→   410→model RentSchedule {
+   411→   411→  id         String    @id @default(cuid())
+   412→   412→  leaseId    String
+   413→   413→  dueDate    DateTime
+   414→   414→  amount     Int
+   415→   415→  paidAmount Int       @default(0)
+   416→   416→  status     String    @default("PENDING") // PENDING | PARTIAL | PAID | LATE | WAIVED
+   417→   417→  paidAt     DateTime?
+   418→   418→  paymentId  String?
+   419→   419→  quittanceUrl String?
+   420→   420→
+   421→   421→  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+   422→   422→
+   423→   423→  @@index([leaseId, dueDate])
+   424→   424→  @@index([status])
+   425→   425→}
+   426→   426→
+   427→   427→// Réservation de meublé courte durée
+   428→   428→model Booking {
+   429→   429→  id         String   @id @default(cuid())
+   430→   430→  code       String   @unique // RES-XXXXXX
+   431→   431→  listingId  String
+   432→   432→  tenantId   String
+   433→   433→  startDate  DateTime
+   434→   434→  endDate    DateTime
+   435→   435→  guests     Int      @default(1)
+   436→   436→  nights     Int
+   437→   437→  totalAmount Int
+   438→   438→  status     String   @default("PENDING_PAYMENT") // PENDING_PAYMENT | CONFIRMED | CANCELLED | COMPLETED
+   439→   439→  createdAt  DateTime @default(now())
+   440→   440→
+   441→   441→  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+   442→   442→  lease   Lease?
+   443→   443→  payments Payment[]
+   444→   444→
+   445→   445→  @@index([listingId, startDate])
+   446→   446→  @@index([tenantId])
+   447→   447→}
+   448→   448→
+   449→   449→// ---------- Paiements, ledger, retraits ----------
+   450→   450→
+   451→   451→model Payment {
+   452→   452→  id         String    @id @default(cuid())
+   453→   453→  reference  String    @unique // PAY-XXXXXX
+   454→   454→  payerId    String
+   455→   455→  purpose    String // INITIAL | RENT | BOOKING | SUBSCRIPTION | DEPOSIT_RETURN
+   456→   456→  amount     Int
+   457→   457→  method     String // MTN_MOMO | MOOV_MONEY | CELTIS_CASH | CARD
+   458→   458→  status     String    @default("INITIATED") // INITIATED | PENDING | SUCCESS | FAILED | REFUNDED | DISPUTED | CANCELLED
+   459→   459→  provider   String    @default("mock") // mock | fedapay | kkiapay
+   460→   460→  providerRef String?  @unique
+   461→   461→  leaseId    String?
+   462→   462→  bookingId  String?
+   463→   463→  invoiceId  String?
+   464→   464→  scheduleId String?
+   465→   465→  breakdownJson String? // [{label, amount}] détail du paiement initial
+   466→   466→  failureReason String?
+   467→   467→  refundedAmount Int    @default(0)
+   468→   468→  createdAt  DateTime  @default(now())
+   469→   469→  confirmedAt DateTime?
+   470→   470→
+   471→   471→  payer    User   @relation("PaymentPayer", fields: [payerId], references: [id])
+   472→   472→  lease    Lease? @relation(fields: [leaseId], references: [id])
+   473→   473→  booking  Booking? @relation(fields: [bookingId], references: [id])
+   474→   474→
+   475→   475→  @@index([payerId])
+   476→   476→  @@index([status])
+   477→   477→  @@index([leaseId])
+   478→   478→}
+   479→   479→
+   480→   480→// Événements de webhook : idempotence stricte (un eventId ne passe qu'une fois)
+   481→   481→model PaymentEvent {
+   482→   482→  id             String    @id @default(cuid())
+   483→   483→  provider       String
+   484→   484→  eventId        String    @unique
+   485→   485→  type           String
+   486→   486→  payloadJson    String
+   487→   487→  signatureValid Boolean   @default(false)
+   488→   488→  processingError String?
+   489→   489→  processedAt    DateTime?
+   490→   490→  createdAt      DateTime  @default(now())
+   491→   491→
+   492→   492→  @@index([provider, processedAt])
+   493→   493→}
+   494→   494→
+   495→   495→// Comptes du ledger en partie double. Soldes DÉRIVÉS des écritures (aucun champ solde).
+   496→   496→// kinds : ASSET_CASH (encaissements plateforme) | ASSET_PAYOUTS (sorties)
+   497→   497→//         LIABILITY_WALLET (dû à un propriétaire/démarcheur) | LIABILITY_ESCROW (séquestre)
+   498→   498→//         REVENUE (abonnements plateforme) | EXPENSE
+   499→   499→model LedgerAccount {
+   500→   500→  id        String  @id @default(cuid())
+   501→   501→  code      String  @unique // ex. WALLET:OWNER:cuid | WALLET:AGENT:cuid | PLATFORM:CASH | PLATFORM:REVENUE | ESCROW:TENANT:cuid
+   502→   502→  kind      String
+   503→   503→  ownerType String // PLATFORM | OWNER | AGENT | TENANT
+   504→   504→  ownerId   String?
+   505→   505→  label     String
+   506→   506→  createdAt DateTime @default(now())
+   507→   507→
+   508→   508→  entries LedgerEntry[]
+   509→   509→
+   510→   510→  @@index([ownerType, ownerId])
+   511→   511→}
+   512→   512→
+   513→   513→// Écritures immuables — une transaction = ensemble équilibré DEBIT/CREDIT (somme égale)
+   514→   514→model LedgerEntry {
+   515→   515→  id            String   @id @default(cuid())
+   516→   516→  accountId     String
+   517→   517→  direction     String // DEBIT | CREDIT
+   518→   518→  amount        Int
+   519→   519→  memo          String
+   520→   520→  paymentId     String?
+   521→   521→  commissionId  String?
+   522→   522→  payoutId      String?
+   523→   523→  idempotencyKey String  @unique
+   524→   524→  createdAt     DateTime @default(now())
+   525→   525→
+   526→   526→  account LedgerAccount @relation(fields: [accountId], references: [id])
+   527→   527→
+   528→   528→  @@index([accountId, createdAt])
+   529→   529→  @@index([paymentId])
+   530→   530→}
+   531→   531→
+   532→   532→model Payout {
+   533→   533→  id             String    @id @default(cuid())
+   534→   534→  userId         String
+   535→   535→  userRole       String // OWNER | AGENT
+   536→   536→  amount         Int
+   537→   537→  method         String // MTN_MOMO | MOOV_MONEY | CELTIS_CASH
+   538→   538→  destination    String // numéro Mobile Money
+   539→   539→  status         String    @default("OTP_PENDING") // OTP_PENDING | REQUESTED | APPROVED | PROCESSING | PAID | REJECTED
+   540→   540→  otpVerified    Boolean   @default(false)
+   541→   541→  reviewedById   String?
+   542→   542→  reviewedAt     DateTime?
+   543→   543→  rejectionReason String?
+   544→   544→  providerRef    String?
+   545→   545→  createdAt      DateTime  @default(now())
+   546→   546→  processedAt    DateTime?
+   547→   547→
+   548→   548→  user User @relation(fields: [userId], references: [id])
+   549→   549→
+   550→   550→  @@index([userId])
+   551→   551→  @@index([status])
+   552→   552→}
+   553→   553→
+   554→   554→// ---------- Abonnements propriétaires ----------
+   555→   555→
+   556→   556→// Tarifs par catégorie, modifiables dans le back-office (paramétrage sans code)
+   557→   557→model CategoryPricing {
+   558→   558→  category     String   @id // EMPTY_HOUSING | FURNISHED | OFFICE
+   559→   559→  monthlyPrice Int
+   560→   560→  label        String
+   561→   561→  updatedAt    DateTime @updatedAt
+   562→   562→}
+   563→   563→
+   564→   564→// Facture mensuelle d'abonnement, une par propriétaire et par période
+   565→   565→model SubscriptionInvoice {
+   566→   566→  id             String    @id @default(cuid())
+   567→   567→  ownerId        String
+   568→   568→  periodStart    DateTime
+   569→   569→  periodEnd      DateTime
+   570→   570→  amount         Int
+   571→   571→  lineItemsJson  String // [{category, label, price, listingCount}]
+   572→   572→  status         String    @default("DUE") // DUE | PAID | OVERDUE | CANCELLED
+   573→   573→  dueDate        DateTime
+   574→   574→  graceUntil     DateTime
+   575→   575→  paidAt         DateTime?
+   576→   576→  paymentId      String?
+   577→   577→  remindersSentJson String @default("[]")
+   578→   578→  createdAt      DateTime  @default(now())
+   579→   579→
+   580→   580→  @@unique([ownerId, periodStart])
+   581→   581→  @@index([ownerId, status])
+   582→   582→}
+   583→   583→
+   584→   584→// ---------- Option Démarcheur (affiliation) ----------
+   585→   585→
+   586→   586→model AffiliateLink {
+   587→   587→  id        String   @id @default(cuid())
+   588→   588→  code      String   @unique // code court pour l'URL ?ref=
+   589→   589→  listingId String
+   590→   590→  agentId   String
+   591→   591→  clicks    Int      @default(0)
+   592→   592→  createdAt DateTime @default(now())
+   593→   593→
+   594→   594→  listing Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+   595→   595→  agent   User     @relation(fields: [agentId], references: [id])
+   596→   596→  clicksList AffiliateClick[]
+   597→   597→  commissions Commission[]
+   598→   598→
+   599→   599→  @@unique([listingId, agentId])
+   600→   600→  @@index([agentId])
+   601→   601→}
+   602→   602→
+   603→   603→model AffiliateClick {
+   604→   604→  id        String   @id @default(cuid())
+   605→   605→  linkId    String
+   606→   606→  visitorId String // cookie visiteur (30 j par défaut, dernier clic prime)
+   607→   607→  ip        String?
+   608→   608→  userAgent String?
+   609→   609→  createdAt DateTime @default(now())
+   610→   610→
+   611→   611→  link AffiliateLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+   612→   612→
+   613→   613→  @@index([linkId])
+   614→   614→  @@index([visitorId])
+   615→   615→}
+   616→   616→
+   617→   617→// Attribution courante par visiteur — dernier clic prime (paramétrable)
+   618→   618→model AffiliateAttribution {
+   619→   619→  id         String   @id @default(cuid())
+   620→   620→  visitorId  String   @unique
+   621→   621→  linkId     String
+   622→   622→  agentId    String
+   623→   623→  listingId  String
+   624→   624→  lastClickAt DateTime @default(now())
+   625→   625→  expiresAt  DateTime
+   626→   626→}
+   627→   627→
+   628→   628→model Commission {
+   629→   629→  id           String    @id @default(cuid())
+   630→   630→  agentId      String
+   631→   631→  listingId    String
+   632→   632→  leaseId      String?
+   633→   633→  bookingId    String?
+   634→   634→  paymentId    String
+   635→   635→  linkId       String?
+   636→   636→  tenantShare  Int // part locataire (25 % d'un mois)
+   637→   637→  ownerShare   Int // part propriétaire (25 % d'un mois)
+   638→   638→  total        Int // 50 % d'un mois
+   639→   639→  status       String    @default("PENDING_VALIDATION") // PENDING_VALIDATION | VALIDATED | PAID | CANCELLED
+   640→   640→  validatableAt DateTime // fin de la période de validation anti-fraude
+   641→   641→  validatedAt  DateTime?
+   642→   642→  paidAt       DateTime?
+   643→   643→  fraudFlag    String?
+   644→   644→  createdAt    DateTime  @default(now())
+   645→   645→
+   646→   646→  agent   User    @relation(fields: [agentId], references: [id])
+   647→   647→  listing Listing @relation(fields: [listingId], references: [id])
+   648→   648→  link    AffiliateLink? @relation(fields: [linkId], references: [id])
+   649→   649→  lease   Lease?  @relation(fields: [leaseId], references: [id])
+   650→   650→
+   651→   651→  @@index([agentId, status])
+   652→   652→  @@index([paymentId])
+   653→   653→}
+   654→   654→
+   655→   655→// ---------- Communication ----------
+   656→   656→
+   657→   657→model Conversation {
+   658→   658→  id            String    @id @default(cuid())
+   659→   659→  listingId     String?
+   660→   660→  leaseId       String?
+   661→   661→  subject       String?
+   662→   662→  lastMessageAt DateTime  @default(now())
+   663→   663→  createdAt     DateTime  @default(now())
+   664→   664→
+   665→   665→  participants ConversationParticipant[]
+   666→   666→  messages     Message[]
+   667→   667→
+   668→   668→  @@index([lastMessageAt])
+   669→   669→}
+   670→   670→
+   671→   671→model ConversationParticipant {
+   672→   672→  conversationId String
+   673→   673→  userId         String
+   674→   674→  lastReadAt     DateTime?
+   675→   675→  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   676→   676→
+   677→   677→  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+   678→   678→
+   679→   679→  @@id([conversationId, userId])
+   680→   680→  @@index([userId])
+   681→   681→}
+   682→   682→
+   683→   683→model Message {
+   684→   684→  id             String   @id @default(cuid())
+   685→   685→  conversationId String
+   686→   686→  senderId       String
+   687→   687→  body           String
+   688→   688→  attachmentUrl  String?
+   689→   689→  createdAt      DateTime @default(now())
+   690→   690→
+   691→   691→  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+   692→   692→  sender       User         @relation(fields: [senderId], references: [id])
+   693→   693→
+   694→   694→  @@index([conversationId, createdAt])
+   695→   695→}
+   696→   696→
+   697→   697→model Announcement {
+   698→   698→  id            String   @id @default(cuid())
+   699→   699→  ownerId       String
+   700→   700→  scope         String   @default("ALL") // ALL | PROPERTY | LISTING
+   701→   701→  scopeId       String?
+   702→   702→  title         String
+   703→   703→  body          String
+   704→   704→  channelsJson  String   @default("[\"IN_APP\"]") // IN_APP | SMS | WHATSAPP
+   705→   705→  recipientCount Int     @default(0)
+   706→   706→  createdAt     DateTime @default(now())
+   707→   707→
+   708→   708→  owner User @relation(fields: [ownerId], references: [id])
+   709→   709→
+   710→   710→  @@index([ownerId])
+   711→   711→}
+   712→   712→
+   713→   713→model Notification {
+   714→   714→  id        String    @id @default(cuid())
+   715→   715→  userId    String
+   716→   716→  type      String // RENT_DUE | RENT_LATE | MESSAGE | VISIT | APPLICATION | PAYMENT | SUBSCRIPTION | COMMISSION | KYC | SYSTEM | TICKET
+   717→   717→  title     String
+   718→   718→  body      String
+   719→   719→  linkHash  String?
+   720→   720→  dataJson  String?
+   721→   721→  readAt    DateTime?
+   722→   722→  createdAt DateTime  @default(now())
+   723→   723→
+   724→   724→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   725→   725→
+   726→   726→  @@index([userId, readAt])
+   727→   727→  @@index([userId, createdAt])
+   728→   728→}
+   729→   729→
+   730→   730→model PushSubscription {
+   731→   731→  id        String   @id @default(cuid())
+   732→   732→  userId    String
+   733→   733→  endpoint  String   @unique
+   734→   734→  keysJson  String
+   735→   735→  createdAt DateTime @default(now())
+   736→   736→
+   737→   737→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   738→   738→}
+   739→   739→
+   740→   740→// ---------- Réparations, avis, signalements ----------
+   741→   741→
+   742→   742→model MaintenanceTicket {
+   743→   743→  id          String    @id @default(cuid())
+   744→   744→  leaseId     String
+   745→   745→  tenantId    String
+   746→   746→  ownerId     String
+   747→   747→  listingId   String
+   748→   748→  title       String
+   749→   749→  description String
+   750→   750→  photosJson  String    @default("[]")
+   751→   751→  status      String    @default("OPEN") // OPEN | IN_PROGRESS | RESOLVED | CLOSED
+   752→   752→  priority    String    @default("NORMAL") // LOW | NORMAL | HIGH
+   753→   753→  createdAt   DateTime  @default(now())
+   754→   754→  resolvedAt  DateTime?
+   755→   755→
+   756→   756→  lease Lease @relation(fields: [leaseId], references: [id])
+   757→   757→  tenant User @relation("TicketTenant", fields: [tenantId], references: [id])
+   758→   758→  updates TicketUpdate[]
+   759→   759→
+   760→   760→  @@index([ownerId, status])
+   761→   761→  @@index([tenantId, status])
+   762→   762→}
+   763→   763→
+   764→   764→model TicketUpdate {
+   765→   765→  id          String   @id @default(cuid())
+   766→   766→  ticketId    String
+   767→   767→  authorId    String
+   768→   768→  body        String
+   769→   769→  photoUrl    String?
+   770→   770→  statusAfter String?
+   771→   771→  createdAt   DateTime @default(now())
+   772→   772→
+   773→   773→  ticket MaintenanceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+   774→   774→
+   775→   775→  @@index([ticketId])
+   776→   776→}
+   777→   777→
+   778→   778→model Review {
+   779→   779→  id           String   @id @default(cuid())
+   780→   780→  leaseId      String
+   781→   781→  listingId    String
+   782→   782→  authorId     String
+   783→   783→  targetUserId String?
+   784→   784→  rating       Int
+   785→   785→  comment      String?
+   786→   786→  status       String   @default("PUBLISHED") // PENDING | PUBLISHED | REJECTED
+   787→   787→  createdAt    DateTime @default(now())
+   788→   788→
+   789→   789→  lease   Lease   @relation(fields: [leaseId], references: [id])
+   790→   790→  listing Listing @relation(fields: [listingId], references: [id])
+   791→   791→  author  User    @relation(fields: [authorId], references: [id])
+   792→   792→
+   793→   793→  @@unique([leaseId, authorId])
+   794→   794→  @@index([listingId])
+   795→   795→}
+   796→   796→
+   797→   797→model Report {
+   798→   798→  id          String    @id @default(cuid())
+   799→   799→  reporterId  String
+   800→   800→  listingId   String?
+   801→   801→  targetUserId String?
+   802→   802→  reason      String // SCAM | FAKE | INAPPROPRIATE | DUPLICATE | OTHER
+   803→   803→  details     String?
+   804→   804→  status      String    @default("OPEN") // OPEN | REVIEWING | RESOLVED | DISMISSED
+   805→   805→  resolution  String?
+   806→   806→  reviewedById String?
+   807→   807→  createdAt   DateTime  @default(now())
+   808→   808→
+   809→   809→  reporter User    @relation("ReportReporter", fields: [reporterId], references: [id])
+   810→   810→  listing  Listing? @relation(fields: [listingId], references: [id])
+   811→   811→
+   812→   812→  @@index([status])
+   813→   813→}
+   814→   814→
+   815→   815→// ---------- Audit & paramétrage ----------
+   816→   816→
+   817→   817→model AuditLog {
+   818→   818→  id         String   @id @default(cuid())
+   819→   819→  actorId    String?
+   820→   820→  action     String // ex. LISTING_PUBLISH, KYC_APPROVE, PAYOUT_APPROVE, SETTING_UPDATE...
+   821→   821→  entityType String
+   822→   822→  entityId   String?
+   823→   823→  metaJson   String?
+   824→   824→  ip         String?
+   825→   825→  createdAt  DateTime @default(now())
+   826→   826→
+   827→   827→  actor User? @relation(fields: [actorId], references: [id])
+   828→   828→
+   829→   829→  @@index([entityType, entityId])
+   830→   830→  @@index([actorId])
+   831→   831→}
+   832→   832→
+   833→   833→model AdminSetting {
+   834→   834→  key       String   @id
+   835→   835→  valueJson String
+   836→   836→  label     String?
+   837→   837→  group     String? // FINANCE | AFFILIATION | MODERATION | NOTIFICATIONS
+   838→   838→  updatedAt DateTime @updatedAt
+   839→   839→}
+   840→   840→
