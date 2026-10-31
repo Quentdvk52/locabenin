@@ -74,6 +74,7 @@ interface TenantsData {
 
 interface AcceptedApplication {
   id: string;
+  status: string;
   leaseId: string | null;
   listing: { id: string; title: string; rentAmount: number; rentPeriod: string; genre: string };
   tenant: { id: string; fullName: string; phone: string | null; kycStatus: string };
@@ -90,6 +91,7 @@ interface LeaseDetail {
   rentPeriod: string;
   depositAmount: number;
   depositReturnedAmount: number;
+  depositReturnedAt: string | null;
   ownerSignatureUrl: string | null;
   tenantSignatureUrl: string | null;
   contractPdfUrl: string | null;

@@ -13,7 +13,7 @@ import "server-only";
 import crypto from "crypto";
 import { db } from "./db";
 import { ApiError } from "./api";
-import { postTransaction, PLATFORM_CASH, PLATFORM_REVENUE, walletCode, PLATFORM_PAYOUTS } from "./ledger";
+import { postTransaction, PLATFORM_CASH, PLATFORM_REVENUE, walletCode, PLATFORM_PAYOUTS, walletBalance } from "./ledger";
 import { getSettings } from "./settings";
 import { normalizeToMonthly } from "./finance";
 import { sendNotification } from "./notifications";

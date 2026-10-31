@@ -1,3 +1,4 @@
+/// <reference types="bun-types" />
 // ============================================================
 // LocaBénin — Tests unitaires de la logique financière (bun test)
 // Exécution : bun test tests/finance.test.ts

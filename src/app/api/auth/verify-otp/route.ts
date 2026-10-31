@@ -46,8 +46,9 @@ export async function POST(req: NextRequest) {
     }
     if (user.userRoles.length === 0) {
       await db.userRole.create({ data: { userId: user.id, role: body.role ?? "TENANT", isDefault: true } });
-      user = await db.user.findUnique({ where: { id: user.id }, include: { userRoles: true } })!;
+      user = await db.user.findUnique({ where: { id: user.id }, include: { userRoles: true } });
     }
+    if (!user) return fail(500, "Compte introuvable après mise à jour. Reconnectez-vous.");
     const activeRole = (user.userRoles.find((r) => r.isDefault)?.role ?? user.userRoles[0].role) as Role;
     await setSessionCookies(user.id, activeRole);
     // Lien cookie visiteur ↔ utilisateur (anti-fraude : bloque l'auto-parrainage au clic)

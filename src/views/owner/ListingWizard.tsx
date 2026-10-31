@@ -270,13 +270,13 @@ export default function ListingWizard({ listingId }: { listingId?: string }) {
     const tooHeavy = videos.find((v) => v.size > MAX_VIDEO_BYTES);
     if (tooHeavy) toast.error(`« ${tooHeavy.name} » dépasse 40 Mo — compressez la vidéo d'abord.`);
 
-    const jobs = [
+    const jobs = await Promise.all([
       ...images.map(async (f) => {
         const blob = await compressToWebp(f);
         return { file: new File([blob], f.name.replace(/\.[^.]+$/, "") + ".webp", { type: "image/webp" }), kind: "IMAGE" as MediaKind };
       }),
       ...videos.filter((v) => v.size <= MAX_VIDEO_BYTES).map(async (f) => ({ file: f, kind: "VIDEO" as MediaKind })),
-    ];
+    ]);
     setUploading({ done: 0, total: jobs.length });
     const uploaded: MediaItem[] = [];
     let i = 0;

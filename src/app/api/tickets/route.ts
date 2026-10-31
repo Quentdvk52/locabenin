@@ -47,12 +47,21 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
       take: 60,
       include: {
-        listing: { select: { title: true } },
         tenant: { select: { fullName: true, phone: true } },
         updates: { orderBy: { createdAt: "asc" } },
       },
     });
-    return ok(tickets.map((t) => ({ ...t, photos: JSON.parse(t.photosJson) as string[] })));
+    // MaintenanceTicket ne porte pas de relation Prisma vers Listing (listingId seul)
+    const ticketListingIds = [...new Set(tickets.map((t) => t.listingId))];
+    const ticketListings = ticketListingIds.length
+      ? await db.listing.findMany({ where: { id: { in: ticketListingIds } }, select: { id: true, title: true } })
+      : [];
+    const ticketTitleById = new Map(ticketListings.map((l) => [l.id, l.title]));
+    return ok(tickets.map((t) => ({
+      ...t,
+      photos: JSON.parse(t.photosJson) as string[],
+      listing: { title: ticketTitleById.get(t.listingId) ?? "" },
+    })));
   });
 }
 

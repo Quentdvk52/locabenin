@@ -68,17 +68,23 @@ export async function GET() {
           include: {
             participants: { include: { user: { select: { id: true, fullName: true, avatarUrl: true } } } },
             messages: { orderBy: { createdAt: "desc" }, take: 1 },
-            listing: { select: { id: true, title: true } },
           },
         },
       },
       orderBy: { conversation: { lastMessageAt: "desc" } },
     });
+    // La Conversation ne porte pas de relation Prisma vers Listing (listingId seul) :
+    // titres résolus en une seule requête complémentaire.
+    const listingIds = [...new Set(participations.map((p) => p.conversation.listingId).filter((x): x is string => Boolean(x)))];
+    const convListings = listingIds.length
+      ? await db.listing.findMany({ where: { id: { in: listingIds } }, select: { id: true, title: true } })
+      : [];
+    const listingById = new Map(convListings.map((l) => [l.id, l]));
     return ok(participations.map((p) => {
       const others = p.conversation.participants.filter((x) => x.userId !== user.id);
       return {
         id: p.conversation.id,
-        listing: p.conversation.listing,
+        listing: p.conversation.listingId ? listingById.get(p.conversation.listingId) ?? null : null,
         other: others[0]?.user ?? null,
         lastMessage: p.conversation.messages[0] ?? null,
         lastMessageAt: p.conversation.lastMessageAt,

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { handle, ok, parseQuery, fail } from "@/lib/api";
+import { handle, ok, parseQuery, ApiError } from "@/lib/api";
 import { db } from "@/lib/db";
 import { getSessionUser, getVisitorId } from "@/lib/auth";
 import { getSettings, categoryForType } from "@/lib/settings";
@@ -33,7 +33,6 @@ const schema = z.object({
 });
 
 export type ListingSearchItem = Awaited<ReturnType<typeof searchListings>>["items"][number];
-
 function featureToBedrooms(feature: string): { gte?: number; in?: number[] } {
   switch (feature) {
     case "studio": return { in: [0] };
@@ -47,9 +46,15 @@ function featureToBedrooms(feature: string): { gte?: number; in?: number[] } {
 export async function GET(req: NextRequest) {
   return handle(async () => {
     const params = parseQuery(req, schema);
-    const user = await getSessionUser();
+    return ok(await searchListings(params));
+  });
+}
 
-    const where: Record<string, unknown> = {
+/** Recherche publique réutilisable (API + imports internes). */
+export async function searchListings(params: z.infer<typeof schema>) {
+  const user = await getSessionUser();
+
+  const where: Record<string, unknown> = {
       status: { in: ["PUBLISHED", "RESERVED", "RENTED"] },
       deletedAt: null,
     };
@@ -102,7 +107,7 @@ export async function GET(req: NextRequest) {
         else if (params.sort === "popular") cursorWhere = { OR: [{ favoritesCount: { lt: a } }, { favoritesCount: a, id: { gt: id } }] };
         else cursorWhere = { OR: [{ createdAt: { lt: new Date(a as string) } }, { createdAt: new Date(a as string), id: { lt: id } }] };
       } catch {
-        return fail(400, "Curseur de pagination invalide.");
+        throw new ApiError(400, "Curseur de pagination invalide.");
       }
     }
 
@@ -168,6 +173,5 @@ export async function GET(req: NextRequest) {
       nextCursor = Buffer.from(JSON.stringify({ v })).toString("base64url");
     }
     const total = await db.listing.count({ where });
-    return ok({ items, nextCursor, total });
-  });
+    return { items, nextCursor, total };
 }

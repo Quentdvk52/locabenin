@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
     const application = await db.application.findUnique({
       where: { id: body.applicationId },
-      include: { listing: true, tenant: true },
+      include: { listing: { include: { depositOptions: true } }, tenant: true },
     });
     if (!application) return fail(404, "Candidature introuvable.");
     if (application.listing.ownerId !== user.id) throw new ApiError(403, "Cette candidature ne concerne pas une de vos offres.");

@@ -98,3 +98,25 @@ Upload direct vers `public/uploads` (sandbox) avec compression client WebP (≤1
 | Google OAuth | Bouton présent, désactivé | NextAuth/Supabase provider (~½ j) |
 | Push web + SW offline | Manifest installable | VAPID + service worker (~1 j) |
 | Vercel Cron facturation | Logique prête (fonction) | Endpoint + cron (~½ j) |
+
+## 8. Phase 9 — Intégration finale & recette (2026-10-31)
+
+### D9.1 — Défauts d'intégration corrigés (conflits entre modules parallèles)
+- `constants.ts` : doublons de clés dans `LABELS` supprimés (FURNISHED, OFFICE, PENDING, PAID, REJECTED) — les libellés de catégorie d'abonnement sont portés par les paramètres admin sans code, plus par `LABELS`.
+- `conversations` & `tickets` : `Conversation` et `MaintenanceTicket` ne portent pas de relation Prisma vers `Listing` (listingId seul) → titres résolus par une requête complémentaire par lot (même forme de réponse pour les vues).
+- `leases` : include `depositOptions` ajouté à la lecture de l'offre (les cautions optionnelles sont reprises du référentiel, pas du snapshot).
+- `payouts` : imports `walletBalance`/`walletStatement` rétablis depuis `@/lib/ledger` (source unique de vérité comptable).
+- `public/listings` : logique de recherche extraite dans `searchListings()` exportée (l'API et le type `ListingSearchItem` partagent la même source).
+- `verify-otp` : garde anti-null après relecture du compte.
+- `ListingWizard` : `Promise.all` sur les téléversements (les jobs n'étaient pas attendus).
+- `seed.ts` : les 6 meublés ont désormais un `rentAmount`/`rentPeriod` de référence (= `monthlyPrice`).
+
+### D9.2 — Configuration de la sandbox découverte en recette
+- `SESSION_SECRET` était absente du `.env` → toute l'auth échouait en 500. Ajoutée (≥ 32 caractères aléatoires) ; `.env.example` fourni.
+- La garde du simulateur de paiement testait `PAYMENT_PROVIDER !== "mock"` alors que l'absence de la variable signifiait déjà mock (défaut de `getPaymentProvider()`) → garde inversée (`=== "fedapay"` refuse le simulateur) + `PAYMENT_PROVIDER=mock` posé explicitement.
+
+### D9.3 — Recette navigateur exécutée (agent-browser)
+Landing (flux 21 offres, à la une, recherche à onglets) · recherche filtrée partageable · fiche simple (calculateur d'entrée exact : 80 000+160 000+240 000=480 000 F) · fiche meublé (tarifs, carte Leaflet, garde d'auth) · mode sombre · OTP (4 comptes) + rate limit vérifié (429 attendu) · sélecteur multi-rôles · paiement loyer MTN MoMo bout-en-bout → quittance PDF 2 pages → échéancier à jour → **ledger équilibré 440 000 F = 440 000 F** · messagerie (envoi + rafraîchissement) · back-office (KPIs, graphiques, intégrité ledger, modération avec approbation réelle → PUBLISHED + audit `LISTING_APPROVE`, paramétrage sans code) · viewport mobile (barre basse fixe + safe-area).
+
+### D9.4 — Qualité finale
+`tsc --noEmit` 0 erreur · `eslint .` 0 erreur · `bun test` 33/33 · `/api/health` `{ok:true,db:"up"}` · données de démonstration re-seedées après correctifs.

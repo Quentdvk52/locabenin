@@ -18,7 +18,9 @@ const schema = z.object({
 export async function POST(req: NextRequest) {
   return handle(async () => {
     await requireUser();
-    if (process.env.PAYMENT_PROVIDER !== "mock") {
+    // Absent = mock (même défaut que getPaymentProvider) — le simulateur
+    // disparaît automatiquement dès que PAYMENT_PROVIDER=fedapay est posé.
+    if (process.env.PAYMENT_PROVIDER === "fedapay") {
       throw new ApiError(404, "Simulateur indisponible.");
     }
     if (!rateLimit("mockpay", 60, 60_000)) throw new ApiError(429, "Simulateur saturé, réessayez.");

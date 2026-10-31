@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { handle, ok, parseBody, requireUser, ApiError } from "@/lib/api";
-import { requestPayout, walletBalance, completePayout, walletStatement } from "@/lib/payments";
+import { requestPayout, completePayout } from "@/lib/payments";
+import { walletBalance, walletStatement } from "@/lib/ledger";
 import { getSettings } from "@/lib/settings";
 import { db } from "@/lib/db";
 

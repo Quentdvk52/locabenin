@@ -103,7 +103,7 @@ export const LABELS: Record<string, string> = {
   // Genres
   SIMPLE: "Location simple", FURNISHED: "Meublé",
   // Catégories d'abonnement
-  EMPTY_HOUSING: "Logements vides", FURNISHED: "Appartements meublés", OFFICE: "Bureaux",
+  EMPTY_HOUSING: "Logements vides",
   // Périodes
   DAY: "jour", WEEK: "semaine", MONTH: "mois", QUARTER: "trimestre", SEMESTER: "semestre", LEASE: "bail",
   // Statuts d'offre
@@ -116,10 +116,10 @@ export const LABELS: Record<string, string> = {
   ACCEPTED: "Acceptée", WITHDRAWN: "Retirée",
   OPEN: "Ouvert", IN_PROGRESS: "En cours", RESOLVED: "Résolu", CLOSED: "Fermé",
   SUCCESS: "Réussi", FAILED: "Échoué", REFUNDED: "Remboursé", DISPUTED: "Litigieux", INITIATED: "Initié",
-  OTP_PENDING: "OTP à confirmer", APPROVED: "Approuvé", PROCESSING: "En cours de paiement", REJECTED: "Rejeté",
+  OTP_PENDING: "OTP à confirmer", APPROVED: "Approuvé", PROCESSING: "En cours de paiement",
   PENDING_PAYMENT: "Paiement en attente", COMPLETED: "Terminé",
-  PENDING_VALIDATION: "En validation", VALIDATED: "Validée", PAID: "Payée",
-  NONE: "Non vérifié", VERIFIED: "Vérifié", PENDING: "En attente",
+  PENDING_VALIDATION: "En validation", VALIDATED: "Validée",
+  NONE: "Non vérifié", VERIFIED: "Vérifié",
   // Méthodes de paiement
   MTN_MOMO: "MTN MoMo", MOOV_MONEY: "Moov Money", CELTIS_CASH: "Celtiis Cash", CARD: "Carte bancaire",
   // Motifs de signalement

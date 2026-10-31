@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PublicHeader, PublicTabBar, DashboardShell, SpaceTabBar, type SpaceNavItem } from "@/components/layout/chrome";
 import { navIcons } from "@/components/layout/chrome";
 import { useSession } from "@/lib/client/session";
+import type { Role } from "@/lib/constants";
 import { useEffect } from "react";
 
 function ViewLoader() {
@@ -82,7 +83,7 @@ export default function AppShell() {
   const { user, loading } = useSession();
 
   // Garde d'espace : si l'utilisateur n'a pas le rôle requis → écran de garde
-  const spaceGuards: Record<string, string[]> = {
+  const spaceGuards: Record<string, Role[]> = {
     proprietaire: ["OWNER", "ADMIN"],
     locataire: ["TENANT", "ADMIN"],
     demarcheur: ["AGENT", "ADMIN"],
