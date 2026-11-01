@@ -119,7 +119,7 @@ Upload direct vers `public/uploads` (sandbox) avec compression client WebP (≤1
 Landing (flux 21 offres, à la une, recherche à onglets) · recherche filtrée partageable · fiche simple (calculateur d'entrée exact : 80 000+160 000+240 000=480 000 F) · fiche meublé (tarifs, carte Leaflet, garde d'auth) · mode sombre · OTP (4 comptes) + rate limit vérifié (429 attendu) · sélecteur multi-rôles · paiement loyer MTN MoMo bout-en-bout → quittance PDF 2 pages → échéancier à jour → **ledger équilibré 440 000 F = 440 000 F** · messagerie (envoi + rafraîchissement) · back-office (KPIs, graphiques, intégrité ledger, modération avec approbation réelle → PUBLISHED + audit `LISTING_APPROVE`, paramétrage sans code) · viewport mobile (barre basse fixe + safe-area).
 
 ### D9.4 — Qualité finale
-`tsc --noEmit` 0 erreur · `eslint .` 0 erreur · `bun test` 33/33 · `/api/health` `{ok:true,db:"up"}` · données de démonstration re-seedées après correctifs.
+`tsc --noEmit` 0 erreur · `eslint .` 0 erreur · `bun test` 54/54 · `/api/health` `{ok:true,db:"up"}` · données de démonstration re-seedées après correctifs.
 
 ## 9. Phase 10 — Branchement FedaPay réel (2026-11-02)
 

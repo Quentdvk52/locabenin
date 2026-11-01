@@ -5,9 +5,13 @@ import { verifyOtp, setSessionCookies, getOrCreateVisitorId } from "@/lib/auth";
 import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { ROLES, type Role } from "@/lib/constants";
+import { normalizePhone } from "@/lib/utils";
 
 const schema = z.object({
-  phone: z.string().regex(/^\+?[0-9]{8,15}$/),
+  phone: z.preprocess(
+    (v) => (typeof v === "string" ? normalizePhone(v) : v),
+    z.string().regex(/^\+?[0-9]{8,15}$/)
+  ),
   code: z.string().regex(/^[0-9]{6}$/, "Code à 6 chiffres requis."),
   fullName: z.string().min(2).max(80).optional(),
   role: z.enum(["OWNER", "TENANT", "AGENT"]).optional(),

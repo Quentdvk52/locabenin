@@ -80,7 +80,7 @@ Copier `.env.example` → configurer sur Vercel (toutes obligatoires sauf mentio
 
 ## 5. Recette finale pré-mise en production
 
-- [ ] `bun run lint` → 0 erreur ; `bunx tsc --noEmit` → 0 erreur ; `bun test` → 33/33.
+- [ ] `bun run lint` → 0 erreur ; `bunx tsc --noEmit` → 0 erreur ; `bun test` → 54/54.
 - [ ] Parcours critique testé sur mobile réel : inscription OTP → recherche → visite → candidature → bail → paiement d'entrée (mock) → quittance PDF.
 - [ ] Paiement abonnement → offre visible ; expiration simulée → offre masquée ; re-paiement → visible.
 - [ ] Lien démarcheur → clic → inscription locataire → bail → commissions 25 %/25 % créditées → fenêtre anti-fraude → validation admin.

@@ -19,7 +19,7 @@ import { navigate } from "@/lib/client/router";
 import { apiSend, ApiClientError } from "@/lib/client/session";
 import { toast } from "sonner";
 import { Logo } from "@/components/layout/chrome";
-import { cn } from "@/lib/utils";
+import { cn, normalizePhone } from "@/lib/utils";
 
 type Step = "phone" | "otp" | "register";
 type RegisterRole = "OWNER" | "TENANT" | "AGENT";
@@ -61,8 +61,10 @@ export default function AuthView() {
 
   async function sendOtp() {
     setLoading(true);
+    const cleanPhone = normalizePhone(phone);
+    setPhone(cleanPhone);
     try {
-      const data = await apiSend<{ devCode: string | null; destination: string }>("/api/auth/send-otp", "POST", { phone });
+      const data = await apiSend<{ devCode: string | null; destination: string }>("/api/auth/send-otp", "POST", { phone: cleanPhone });
       setDevCode(data.devCode);
       setStep("otp");
       setCountdown(45);

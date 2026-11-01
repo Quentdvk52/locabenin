@@ -3,9 +3,13 @@ import { z } from "zod";
 import { handle, ok, parseBody, fail, getClientMeta } from "@/lib/api";
 import { createOtp } from "@/lib/auth";
 import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { normalizePhone } from "@/lib/utils";
 
 const schema = z.object({
-  phone: z.string().regex(/^\+?[0-9]{8,15}$/, "Numéro de téléphone invalide (ex. +2290197000000)."),
+  phone: z.preprocess(
+    (v) => (typeof v === "string" ? normalizePhone(v) : v),
+    z.string().regex(/^\+?[0-9]{8,15}$/, "Numéro de téléphone invalide (ex. +2290197000000).")
+  ),
 });
 
 export async function POST(req: NextRequest) {
