@@ -84,12 +84,12 @@ export default function OwnerFinance() {
 
   async function paySubscription(method: PaymentMethod) {
     if (!payInvoice) throw new Error("Aucune facture sélectionnée.");
-    const res = await apiSend<{ payment: { reference: string }; mockConfirmToken?: string }>("/api/payments/initiate", "POST", {
+    const res = await apiSend<{ payment: { reference: string }; mockConfirmToken?: string; checkoutUrl?: string | null }>("/api/payments/initiate", "POST", {
       purpose: "SUBSCRIPTION",
       invoiceId: payInvoice.id,
       method,
     });
-    return { reference: res.payment.reference, mockConfirmToken: res.mockConfirmToken };
+    return { reference: res.payment.reference, mockConfirmToken: res.mockConfirmToken, checkoutUrl: res.checkoutUrl };
   }
 
   if (finances.isLoading) {

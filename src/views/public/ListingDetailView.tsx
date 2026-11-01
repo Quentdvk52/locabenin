@@ -594,10 +594,10 @@ export default function ListingDetailView({ listingId }: { listingId: string }) 
         description={`Réservation — ${listing.title}`}
         makePayment={async (method) => {
           if (!bookingId) throw new Error("Réservation introuvable.");
-          const r = await apiSend<{ payment: { reference: string }; mockConfirmToken: string | null }>("/api/payments/initiate", "POST", {
+          const r = await apiSend<{ payment: { reference: string }; mockConfirmToken: string | null; checkoutUrl?: string | null }>("/api/payments/initiate", "POST", {
             purpose: "BOOKING", bookingId, method,
           });
-          return { reference: r.payment.reference, mockConfirmToken: r.mockConfirmToken };
+          return { reference: r.payment.reference, mockConfirmToken: r.mockConfirmToken, checkoutUrl: r.checkoutUrl };
         }}
         onPaid={() => {
           void refetch();

@@ -13,6 +13,10 @@ import "server-only";
 import crypto from "crypto";
 import { db } from "./db";
 import { ApiError } from "./api";
+import {
+  readFedapayConfig, fedapayApiBase, verifyFedapaySignature,
+  type FedapayEnvironment,
+} from "./fedapay";
 import { postTransaction, PLATFORM_CASH, PLATFORM_REVENUE, walletCode, PLATFORM_PAYOUTS, walletBalance } from "./ledger";
 import { getSettings } from "./settings";
 import { normalizeToMonthly } from "./finance";
@@ -36,6 +40,8 @@ export interface InitiateResult {
   status: "PENDING";
   // En sandbox : jeton de confirmation du simulateur Mobile Money.
   mockConfirmToken?: string;
+  // FedaPay : URL de la caisse hébergée — le client y est redirigé.
+  checkoutUrl?: string;
 }
 
 export interface PaymentProvider {
@@ -66,19 +72,100 @@ export class MockPaymentProvider implements PaymentProvider {
   }
 }
 
-export class FedaPayProviderStub implements PaymentProvider {
+/**
+ * FedaPay — implémentation RÉELLE (API v1, documentation officielle) :
+ *  1. POST /v1/transactions (montant entier XOF, custom_metadata.reference =
+ *     référence LocaBénin) → {"v1/transaction": {id, status…}} ;
+ *  2. POST /v1/transactions/{id}/token → lien de caisse hébergée ;
+ *  3. le webhook signé (X-FEDAPAY-SIGNATURE) traverse le pipeline commun
+ *     processWebhookEvent (idempotence + machine à états inchangées).
+ * Toute autre partie du code reste identique (décision utilisateur).
+ */
+export class FedaPayProvider implements PaymentProvider {
   readonly name = "fedapay";
-  async initiate(_input: InitiateInput): Promise<InitiateResult> {
-    throw new ApiError(501, "FedaPay n'est pas encore branché : configurer FEDAPAY_SECRET_KEY puis implémenter l'appel API.");
+
+  private cfg = readFedapayConfig();
+
+  private authHeaders(): Record<string, string> {
+    if (!this.cfg.secretKey) {
+      throw new ApiError(503, "FedaPay n'est pas configuré : renseigner FEDAPAY_SECRET_KEY (et PAYMENT_PROVIDER=fedapay).");
+    }
+    return { "Authorization": `Bearer ${this.cfg.secretKey}`, "Content-Type": "application/json" };
   }
-  verifyWebhook(_rawBody: string, _signature: string | null): boolean {
-    throw new ApiError(501, "Vérification FedaPay non configurée.");
+
+  private static checkoutBase(environment: FedapayEnvironment): string {
+    return environment === "live" ? "https://checkout.fedapay.com" : "https://sandbox-checkout.fedapay.com";
+  }
+
+  async initiate(input: InitiateInput): Promise<InitiateResult> {
+    const headers = this.authHeaders();
+    const base = fedapayApiBase(this.cfg.environment);
+    const callbackUrl = process.env.PUBLIC_BASE_URL?.replace(/\/$/, "") ?? "";
+
+    let created: { "v1/transaction"?: { id?: number | string } };
+    try {
+      const res = await fetch(`${base}/v1/transactions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          description: input.description,
+          amount: input.amount,
+          currency: { iso: "XOF" },
+          ...(callbackUrl ? { callback_url: callbackUrl } : {}),
+          customer: {
+            firstname: "Client",
+            lastname: "LocaBénin",
+            ...(input.payerEmail ? { email: input.payerEmail } : {}),
+            ...(input.payerPhone ? { phone_number: { number: input.payerPhone, country: "bj" } } : {}),
+          },
+          custom_metadata: { reference: input.reference },
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        console.error(`[FEDAPAY] création refusée (${res.status}) : ${detail.slice(0, 300)}`);
+        throw new ApiError(502, "FedaPay a refusé la création de la transaction. Réessayez ou changez de moyen de paiement.");
+      }
+      created = (await res.json()) as typeof created;
+    } catch (e) {
+      if (e instanceof ApiError) throw e;
+      console.error("[FEDAPAY] erreur réseau à la création", e);
+      throw new ApiError(502, "FedaPay est momentanément injoignable. Réessayez dans un instant.");
+    }
+
+    const txId = created?.["v1/transaction"]?.id;
+    if (txId === undefined || txId === null) {
+      console.error("[FEDAPAY] réponse inattendue à la création de transaction");
+      throw new ApiError(502, "Réponse FedaPay inattendue. Réessayez.");
+    }
+
+    // Lien de paiement (caisse hébergée) : la réponse fournit token + url.
+    let checkoutUrl: string | undefined;
+    try {
+      const res = await fetch(`${base}/v1/transactions/${txId}/token`, {
+        method: "POST", headers,
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (res.ok) {
+        const tok = (await res.json()) as { token?: string; url?: string };
+        checkoutUrl = tok.url ?? (tok.token ? `${FedaPayProvider.checkoutBase(this.cfg.environment)}/${tok.token}` : undefined);
+      }
+    } catch (e) {
+      console.error("[FEDAPAY] échec du lien de paiement (transaction créée)", e);
+    }
+    return { providerRef: String(txId), status: "PENDING", checkoutUrl };
+  }
+
+  verifyWebhook(rawBody: string, signature: string | null): boolean {
+    if (!this.cfg.webhookSecret) return false;
+    return verifyFedapaySignature(rawBody, signature, this.cfg.webhookSecret);
   }
 }
 
 export function getPaymentProvider(): PaymentProvider {
   switch (process.env.PAYMENT_PROVIDER) {
-    case "fedapay": return new FedaPayProviderStub();
+    case "fedapay": return new FedaPayProvider();
     default: return new MockPaymentProvider();
   }
 }
@@ -117,7 +204,7 @@ export async function initiatePayment(input: {
       breakdownJson: input.breakdown ? JSON.stringify(input.breakdown) : null,
     },
   });
-  return { payment, mockConfirmToken: result.mockConfirmToken };
+  return { payment, mockConfirmToken: result.mockConfirmToken, checkoutUrl: result.checkoutUrl };
 }
 
 export interface WebhookEventInput {

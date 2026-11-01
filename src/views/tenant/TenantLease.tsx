@@ -99,18 +99,18 @@ export function TenantLease() {
 
   async function makeSchedulePayment(method: string): Promise<PaymentIntent> {
     if (!paySchedule) throw new Error("Aucune échéance sélectionnée.");
-    const res = await guardedSend<{ payment: { reference: string; amount: number }; mockConfirmToken: string }>(
+    const res = await guardedSend<{ payment: { reference: string; amount: number }; mockConfirmToken: string; checkoutUrl?: string | null }>(
       "/api/payments/initiate", "POST", { purpose: "RENT", scheduleId: paySchedule.id, method },
     );
-    return { reference: res.payment.reference, mockConfirmToken: res.mockConfirmToken, amount: res.payment.amount };
+    return { reference: res.payment.reference, mockConfirmToken: res.mockConfirmToken, checkoutUrl: res.checkoutUrl, amount: res.payment.amount };
   }
 
   async function makeInitialPayment(method: string): Promise<PaymentIntent> {
     if (!lease) throw new Error("Aucun bail sélectionné.");
-    const res = await guardedSend<{ payment: { reference: string; amount: number; status: string }; mockConfirmToken: string; breakdown: Array<{ label: string; amount: number }> }>(
+    const res = await guardedSend<{ payment: { reference: string; amount: number; status: string }; mockConfirmToken: string; checkoutUrl?: string | null; breakdown: Array<{ label: string; amount: number }> }>(
       "/api/payments/initiate", "POST", { purpose: "INITIAL", leaseId: lease.id, method },
     );
-    return { reference: res.payment.reference, mockConfirmToken: res.mockConfirmToken, amount: res.payment.amount, breakdown: res.breakdown };
+    return { reference: res.payment.reference, mockConfirmToken: res.mockConfirmToken, checkoutUrl: res.checkoutUrl, amount: res.payment.amount, breakdown: res.breakdown };
   }
 
   async function submitSignature() {

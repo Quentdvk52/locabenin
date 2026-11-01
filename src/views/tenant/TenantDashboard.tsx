@@ -79,10 +79,10 @@ export function TenantDashboard() {
 
   async function makeRentPayment(method: string): Promise<PaymentIntent> {
     if (!paySchedule) throw new Error("Aucune échéance sélectionnée.");
-    const res = await guardedSend<{ payment: { reference: string; amount: number }; mockConfirmToken: string }>(
+    const res = await guardedSend<{ payment: { reference: string; amount: number }; mockConfirmToken: string; checkoutUrl?: string | null }>(
       "/api/payments/initiate", "POST", { purpose: "RENT", scheduleId: paySchedule.id, method },
     );
-    return { reference: res.payment.reference, mockConfirmToken: res.mockConfirmToken, amount: res.payment.amount };
+    return { reference: res.payment.reference, mockConfirmToken: res.mockConfirmToken, checkoutUrl: res.checkoutUrl, amount: res.payment.amount };
   }
 
   return (

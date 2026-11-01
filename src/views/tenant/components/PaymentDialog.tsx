@@ -34,7 +34,7 @@ const METHODS = [
   { code: "CARD", icon: CreditCard, hint: "Carte bancaire" },
 ] as const;
 
-type Step = "method" | "confirm" | "processing" | "success" | "failed";
+type Step = "method" | "confirm" | "redirect" | "processing" | "success" | "failed";
 
 interface StatusPayload {
   id: string;
@@ -65,6 +65,17 @@ export function PaymentDialog({ open, onClose, makePayment, onSuccess, title = "
   const [finalPayment, setFinalPayment] = useState<StatusPayload | null>(null);
   const [busy, setBusy] = useState(false);
   const alive = useRef(true);
+  const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Redirection automatique vers la caisse hébergée FedaPay (une seule fois).
+  useEffect(() => {
+    if (step === "redirect" && intent?.checkoutUrl) {
+      redirectTimer.current = setTimeout(() => {
+        window.location.assign(intent.checkoutUrl!);
+      }, 1600);
+      return () => { if (redirectTimer.current) clearTimeout(redirectTimer.current); };
+    }
+  }, [step, intent]);
 
   useEffect(() => {
     alive.current = true;
@@ -81,6 +92,10 @@ export function PaymentDialog({ open, onClose, makePayment, onSuccess, title = "
       setBusy(false);
     }
   }, [open]);
+
+  function gotoCheckout(url: string) {
+    window.location.assign(url);
+  }
 
   async function guard401<T>(fn: () => Promise<T>): Promise<T> {
     try {
@@ -101,7 +116,7 @@ export function PaymentDialog({ open, onClose, makePayment, onSuccess, title = "
       const intent = await guard401(() => makePayment(code));
       if (!alive.current) return;
       setIntent(intent);
-      setStep("confirm");
+      setStep(intent.checkoutUrl ? "redirect" : "confirm");
     } catch (e) {
       if (!alive.current) return;
       toast.error(e instanceof Error ? e.message : "Paiement impossible pour le moment.");
@@ -184,6 +199,20 @@ export function PaymentDialog({ open, onClose, makePayment, onSuccess, title = "
             </fieldset>
             <Button className="h-11 w-full text-base" disabled={busy} onClick={() => void chooseAndPay(method)}>
               {busy ? <><Loader2 className="size-4 animate-spin" aria-hidden /> Initialisation…</> : "Payer"}
+            </Button>
+          </div>
+        )}
+
+        {step === "redirect" && intent?.checkoutUrl && (
+          <div className="space-y-4 py-2 text-center">
+            <ShieldCheck className="mx-auto size-10 text-primary" aria-hidden />
+            <p className="font-medium">Redirection vers FedaPay…</p>
+            <p className="text-sm text-muted-foreground">
+              Vous allez être redirigé vers la page de paiement sécurisée pour valider {formatFcfa(intent.amount)}. Une fois le
+              paiement confirmé, le statut se met à jour automatiquement dans votre historique (réf. {intent.reference}).
+            </p>
+            <Button className="h-11 w-full text-base" onClick={() => gotoCheckout(intent.checkoutUrl!)}>
+              Continuer vers le paiement <ExternalLink className="size-4" aria-hidden />
             </Button>
           </div>
         )}

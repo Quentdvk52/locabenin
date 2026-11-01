@@ -63,12 +63,12 @@ export async function POST(req: NextRequest) {
         commissionTenantShare: lease.commissionTenantShare,
       });
       const total = sumLines(lines);
-      const { payment, mockConfirmToken } = await initiatePayment({
+      const { payment, mockConfirmToken, checkoutUrl } = await initiatePayment({
         payerId: user.id, purpose: "INITIAL", amount: total, method: body.method,
         description: `Paiement d'entrée — ${lease.listing.title}`,
         leaseId: lease.id, breakdown: lines,
       });
-      return ok({ payment: { id: payment.id, reference: payment.reference, amount: payment.amount, status: payment.status }, mockConfirmToken, breakdown: lines });
+      return ok({ payment: { id: payment.id, reference: payment.reference, amount: payment.amount, status: payment.status }, mockConfirmToken, checkoutUrl, breakdown: lines });
     }
 
     if (body.purpose === "RENT") {
@@ -76,36 +76,36 @@ export async function POST(req: NextRequest) {
       if (!schedule || schedule.lease.tenantId !== user.id) return fail(404, "Échéance introuvable.");
       if (schedule.status === "PAID") throw new ApiError(400, "Cette échéance est déjà payée.");
       const remaining = schedule.amount - schedule.paidAmount;
-      const { payment, mockConfirmToken } = await initiatePayment({
+      const { payment, mockConfirmToken, checkoutUrl } = await initiatePayment({
         payerId: user.id, purpose: "RENT", amount: remaining, method: body.method,
         description: `Loyer — ${schedule.lease.listing.title}`,
         leaseId: schedule.leaseId, scheduleId: schedule.id,
         breakdown: [{ label: `Loyer période du ${schedule.dueDate.toLocaleDateString("fr-FR")}`, amount: remaining }],
       });
-      return ok({ payment: { id: payment.id, reference: payment.reference, amount: payment.amount, status: payment.status }, mockConfirmToken });
+      return ok({ payment: { id: payment.id, reference: payment.reference, amount: payment.amount, status: payment.status }, mockConfirmToken, checkoutUrl });
     }
 
     if (body.purpose === "BOOKING") {
       const booking = await db.booking.findUnique({ where: { id: body.bookingId }, include: { listing: true } });
       if (!booking || booking.tenantId !== user.id) return fail(404, "Réservation introuvable.");
       if (booking.status !== "PENDING_PAYMENT") throw new ApiError(400, "Cette réservation a déjà été traitée.");
-      const { payment, mockConfirmToken } = await initiatePayment({
+      const { payment, mockConfirmToken, checkoutUrl } = await initiatePayment({
         payerId: user.id, purpose: "BOOKING", amount: booking.totalAmount, method: body.method,
         description: `Réservation ${booking.code} — ${booking.listing.title}`,
         bookingId: booking.id, breakdown: [{ label: `Séjour de ${booking.nights} nuit(s)`, amount: booking.totalAmount }],
       });
-      return ok({ payment: { id: payment.id, reference: payment.reference, amount: payment.amount, status: payment.status }, mockConfirmToken });
+      return ok({ payment: { id: payment.id, reference: payment.reference, amount: payment.amount, status: payment.status }, mockConfirmToken, checkoutUrl });
     }
 
     // SUBSCRIPTION
     const invoice = await db.subscriptionInvoice.findUnique({ where: { id: body.invoiceId } });
     if (!invoice || invoice.ownerId !== user.id) return fail(404, "Facture introuvable.");
     if (invoice.status === "PAID") throw new ApiError(400, "Cette facture est déjà payée.");
-    const { payment, mockConfirmToken } = await initiatePayment({
+    const { payment, mockConfirmToken, checkoutUrl } = await initiatePayment({
       payerId: user.id, purpose: "SUBSCRIPTION", amount: invoice.amount, method: body.method,
       description: "Abonnement LocaBénin — publication d'offres",
       invoiceId: invoice.id, breakdown: (JSON.parse(invoice.lineItemsJson) as Array<{ label: string; price: number }>).map((li) => ({ label: li.label, amount: li.price })),
     });
-    return ok({ payment: { id: payment.id, reference: payment.reference, amount: payment.amount, status: payment.status }, mockConfirmToken });
+    return ok({ payment: { id: payment.id, reference: payment.reference, amount: payment.amount, status: payment.status }, mockConfirmToken, checkoutUrl });
   });
 }

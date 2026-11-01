@@ -120,3 +120,32 @@ Landing (flux 21 offres, à la une, recherche à onglets) · recherche filtrée 
 
 ### D9.4 — Qualité finale
 `tsc --noEmit` 0 erreur · `eslint .` 0 erreur · `bun test` 33/33 · `/api/health` `{ok:true,db:"up"}` · données de démonstration re-seedées après correctifs.
+
+## 9. Phase 10 — Branchement FedaPay réel (2026-11-02)
+
+### D10.1 — Contrat API vérifié auprès des sources officielles
+Implémentation écrite **à partir de la documentation publique et du code source du SDK officiel `fedapay-node` v1.2.5** (non d'hypothèses) :
+- API : `POST {base}/v1/transactions` (montant **entier** XOF, `custom_metadata.reference` = référence `PAY-…` LocaBénin, `callback_url` = `PUBLIC_BASE_URL`) puis `POST {base}/v1/transactions/{id}/token` (caisse hébergée) ; bases `https://api.fedapay.com` (live) / `https://sandbox-api.fedapay.com` ; réponses enveloppées `{"v1/transaction": …}`.
+- Webhook : en-tête `X-FEDAPAY-SIGNATURE` au format `t=<unix>,s=<hex>[,s=…]` — signature = **HMAC-SHA256(secret, `"<t>.<corps brut>"`)**, comparaison à constante de temps, tolérance anti-rejeu **300 s** (valeur du SDK, cadre symétrique ajouté pour un horodatage futur).
+- Découverte du contrat par le SDK officiel, non par un paquet npm tiers : aucun nouveau paquet ajouté (implémentation maison de `WebhookSignature`, ~60 lignes, testée).
+
+### D10.2 — Architecture inchangée : le provider ne modifie QUE sa classe
+`FedaPayProvider` remplace `FedaPayProviderStub` derrière la même interface `PaymentProvider` ; le simulateur `mock` reste le défaut (`PAYMENT_PROVIDER=mock`) et le pipeline webhook/idempotence/ledger/quittances/commissions est **strictement commun** (aucun `if provider === "fedapay"` dans les effets métier ; la seule spécialisation est le parsing du format d'événement natif dans la route webhook via `parseFedapayEvent`). Le jour où KkiaPay est souhaité : même interface.
+
+### D10.3 — Mapping des événements (choix assumés)
+- `transaction.approved` **et `transaction.transferred`** → `payment.succeeded` (transféré = client a payé puis fonds arrivés ; l'approbation reste le déclencheur principal, `transferred` n'ajoute aucun effet grâce à la machine à états non-régressive).
+- `declined` / `canceled` / `expired` → `payment.failed` ; `refunded` → `payment.refunded` (effet : journalisé, gestion des litiges admin existante).
+- `transaction.created` / `updated` / `customer.*` → **réponse 200 `ignored`** sans écriture : évite la désactivation automatique du endpoint après 10 échecs (comportement documenté FedaPay).
+- Transactions sans référence `PAY-…` dans `custom_metadata` (fallback `entity.reference` strict) → ignorées : jamais d'effet métier sur une transaction née hors LocaBénin.
+- Client FedaPay créé avec `firstname: "Client"`, `lastname: "LocaBénin"` + email/téléphone du payeur (les noms propres ne sont pas exigés par l'API pour encaisser).
+
+### D10.4 — Front-end : redirection vers la caisse hébergée
+Quand `initiate` renvoie `checkoutUrl` (provider fedapay), les 3 dialogues de paiement (locataire, propriétaire, public) affichent une étape « Redirection vers FedaPay » avec renvoi automatique (1,6 s) + bouton manuel ; le simulateur ne s'affiche que pour `mock`. La confirmation arrive par webhook ; le statut se rafraîchit à la navigation suivante (historique de paiements). Route `/api/payments/mock-confirm` refuse le simulateur dès que `PAYMENT_PROVIDER=fedapay`.
+
+### D10.5 — Robustesse de la création de transaction
+Timeout 15 s sur les deux appels, erreurs réseau/API transformées en `ApiError 502` avec message utilisateur clair (jamais d'exception brute, jamais de détail d'authentification), journal serveur du corps d'erreur tronqué. Échec du lien token : transaction créée reste exploitable (paiement `PENDING`, l'utilisateur peut réessayer).
+
+### D10.6 — Recette environnement de la Phase 10
+- `SESSION_SECRET` **perdue lors du recyclage de la sandbox** (`.env` réduit à `DATABASE_URL`) : régénérée et documentée ; `.env.example` créé (absent) avec toutes les variables et la procédure de génération.
+- Tests : **21 nouveaux tests** `tests/fedapay.test.ts` (signature valide/altérée/mauvais secret/malformée/anti-rejeu/multi-signatures ; mapping complet des événements ; idempotence de l'eventId ; config) → **54/54** au total. `tsc --noEmit` 0 erreur, `eslint .` 0 erreur.
+- Activation à l'arrivée des clés (aucun code) : `FEDAPAY_SECRET_KEY` + `FEDAPAY_ENVIRONMENT` + `FEDAPAY_WEBHOOK_SECRET` + `PUBLIC_BASE_URL` + `PAYMENT_PROVIDER=fedapay`, endpoint `https://<domaine>/api/webhooks/payment/fedapay`.

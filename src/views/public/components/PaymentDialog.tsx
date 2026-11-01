@@ -3,15 +3,16 @@
 // ============================================================
 // LocaBénin — Dialog de paiement Mobile Money (flux complet)
 // 1. Choix de la méthode (MTN MoMo / Moov Money / Celtiis Cash / Carte)
-// 2. makePayment(method) → initiate → { reference, mockConfirmToken }
-// 3. Simulateur sandbox (si token) : « Entrez votre code Mobile Money »
+// 2. makePayment(method) → initiate → { reference, mockConfirmToken, checkoutUrl }
+// 3. FedaPay (checkoutUrl) : redirection vers la caisse hébergée
+// 4. Simulateur sandbox (si token) : « Entrez votre code Mobile Money »
 //    → POST /api/payments/mock-confirm
-// 4. Polling GET /api/payments/status (max 10 tentatives) → succès/échec
+// 5. Polling GET /api/payments/status (max 10 tentatives) → succès/échec
 // Réutilisable tel quel : le parent ne fournit que makePayment().
 // ============================================================
 
 import { useEffect, useRef, useState } from "react";
-import { Smartphone, Wallet, Coins, CreditCard, Loader2, ShieldCheck, CircleCheck, CircleAlert, RefreshCw } from "lucide-react";
+import { Smartphone, Wallet, Coins, CreditCard, Loader2, ShieldCheck, CircleCheck, CircleAlert, RefreshCw, ExternalLink } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,8 +30,8 @@ export interface PaymentDialogProps {
   amount: number;
   /** Intitulé affiché (ex. « Réservation RES-XXX »). */
   description?: string;
-  /** Déclenche l'initiation côté serveur et renvoie la référence + token simulateur. */
-  makePayment: (method: PaymentMethod) => Promise<{ reference: string; mockConfirmToken: string | null }>;
+  /** Déclenche l'initiation côté serveur et renvoie référence, token simulateur et lien FedaPay éventuel. */
+  makePayment: (method: PaymentMethod) => Promise<{ reference: string; mockConfirmToken: string | null; checkoutUrl?: string | null }>;
   /** Appelé quand le paiement passe en SUCCESS. */
   onPaid?: (reference: string) => void;
 }
@@ -42,7 +43,7 @@ const METHODS: Array<{ code: PaymentMethod; icon: typeof Smartphone; hint: strin
   { code: "CARD", icon: CreditCard, hint: "Visa / Mastercard (test)" },
 ];
 
-type Step = "method" | "processing" | "confirm" | "waiting" | "success" | "error";
+type Step = "method" | "processing" | "confirm" | "redirect" | "waiting" | "success" | "error";
 
 const POLL_INTERVAL_MS = 1500;
 const POLL_MAX_TRIES = 10;
@@ -66,9 +67,17 @@ export function PaymentDialog({ open, onClose, amount, description, makePayment,
   const [method, setMethod] = useState<PaymentMethod>("MTN_MOMO");
   const [reference, setReference] = useState<string | null>(null);
   const [mockToken, setMockToken] = useState<string | null>(null);
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
   const [momoCode, setMomoCode] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const busyRef = useRef(false);
+
+  // Redirection automatique vers la caisse hébergée FedaPay (une seule fois).
+  useEffect(() => {
+    if (step !== "redirect" || !redirectUrl) return;
+    const t = setTimeout(() => window.location.assign(redirectUrl), 1600);
+    return () => clearTimeout(t);
+  }, [step, redirectUrl]);
 
   // Réinitialisation complète à chaque ouverture.
   useEffect(() => {
@@ -77,6 +86,7 @@ export function PaymentDialog({ open, onClose, amount, description, makePayment,
       setMethod("MTN_MOMO");
       setReference(null);
       setMockToken(null);
+      setRedirectUrl(null);
       setMomoCode("");
       setErrorMsg("");
       busyRef.current = false;
@@ -99,9 +109,14 @@ export function PaymentDialog({ open, onClose, amount, description, makePayment,
     setStep("processing");
     setErrorMsg("");
     try {
-      const { reference: ref, mockConfirmToken } = await makePayment(method);
+      const { reference: ref, mockConfirmToken, checkoutUrl } = await makePayment(method);
       setReference(ref);
-      if (mockConfirmToken) {
+      if (checkoutUrl) {
+        // FedaPay actif : redirection vers la caisse hébergée ; la confirmation
+        // arrive par webhook et le statut se rafraîchit à la navigation suivante.
+        setRedirectUrl(checkoutUrl);
+        setStep("redirect");
+      } else if (mockConfirmToken) {
         setMockToken(mockConfirmToken);
         setStep("confirm");
       } else {
@@ -206,6 +221,20 @@ export function PaymentDialog({ open, onClose, amount, description, makePayment,
           <div className="flex flex-col items-center gap-3 py-8" role="status">
             <Loader2 className="size-8 animate-spin text-primary" aria-hidden />
             <p className="text-sm text-muted-foreground">Initialisation du paiement {label(method)}…</p>
+          </div>
+        )}
+
+        {step === "redirect" && redirectUrl && (
+          <div className="flex flex-col items-center gap-3 py-4 text-center">
+            <ShieldCheck className="size-10 text-primary" aria-hidden />
+            <p className="font-medium">Redirection vers FedaPay…</p>
+            <p className="text-sm text-muted-foreground">
+              Vous allez être redirigé vers la page de paiement sécurisée. Une fois le paiement confirmé, le statut se met à jour
+              automatiquement (réf. {reference ?? "—"}).
+            </p>
+            <Button className="w-full" size="lg" onClick={() => window.location.assign(redirectUrl)}>
+              Continuer vers le paiement <ExternalLink className="ml-2 size-4" aria-hidden />
+            </Button>
           </div>
         )}
 

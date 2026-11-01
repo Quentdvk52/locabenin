@@ -164,6 +164,8 @@ export interface PaymentHistoryItem {
 export interface PaymentIntent {
   reference: string;
   mockConfirmToken?: string;
+  /** FedaPay : URL de la caisse hébergée — redirection au lieu du simulateur. */
+  checkoutUrl?: string | null;
   amount: number;
   breakdown?: Array<{ label: string; amount: number }>;
 }

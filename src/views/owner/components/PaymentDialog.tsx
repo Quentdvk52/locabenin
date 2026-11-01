@@ -6,9 +6,10 @@
 //   1. choix de la méthode → makePayment(method) (initiation côté API)
 //   2. simulateur agrégateur (sandbox) : réussite / échec
 //   3. confirmation via /api/payments/mock-confirm (vrai pipeline webhook)
+//   4. FedaPay (checkoutUrl) : redirection vers la caisse hébergée
 // ============================================================
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -16,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2, Smartphone, CheckCircle2, XCircle, ArrowRight } from "lucide-react";
+import { Loader2, Smartphone, CheckCircle2, XCircle, ArrowRight, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { formatFcfa } from "@/lib/finance";
 import { apiSend } from "@/lib/client/session";
@@ -44,12 +45,12 @@ export interface PaymentDialogProps {
    * Initie le paiement pour la méthode choisie et renvoie la référence +
    * le jeton du simulateur (contrat identique au module locataire).
    */
-  makePayment: (method: PaymentMethod) => Promise<{ reference: string; mockConfirmToken?: string }>;
+  makePayment: (method: PaymentMethod) => Promise<{ reference: string; mockConfirmToken?: string; checkoutUrl?: string | null }>;
   /** Appelé après une confirmation réussie (invalidation des requêtes) */
   onSuccess?: () => void;
 }
 
-type Step = "method" | "simulator" | "done" | "failed";
+type Step = "method" | "simulator" | "redirect" | "done" | "failed";
 
 export function PaymentDialog({ open, onOpenChange, title, description, amount, makePayment, onSuccess }: PaymentDialogProps) {
   const [step, setStep] = useState<Step>("method");
@@ -57,10 +58,19 @@ export function PaymentDialog({ open, onOpenChange, title, description, amount, 
   const [phone, setPhone] = useState("");
   const [reference, setReference] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+
+  // Redirection automatique vers la caisse hébergée FedaPay (une seule fois).
+  useEffect(() => {
+    if (step !== "redirect" || !redirectUrl) return;
+    const t = setTimeout(() => window.location.assign(redirectUrl), 1600);
+    return () => clearTimeout(t);
+  }, [step, redirectUrl]);
 
   const reset = () => {
     setStep("method");
     setReference(null);
+    setRedirectUrl(null);
     setBusy(false);
   };
 
@@ -74,7 +84,12 @@ export function PaymentDialog({ open, onOpenChange, title, description, amount, 
     try {
       const res = await makePayment(method);
       setReference(res.reference);
-      setStep("simulator");
+      if (res.checkoutUrl) {
+        setRedirectUrl(res.checkoutUrl);
+        setStep("redirect");
+      } else {
+        setStep("simulator");
+      }
     } catch (e) {
       handleApiError(e, "Échec de l'initialisation du paiement.");
     } finally {
@@ -145,6 +160,21 @@ export function PaymentDialog({ open, onOpenChange, title, description, amount, 
             <Button onClick={() => void start()} disabled={busy} className="h-11 w-full text-base">
               {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <ArrowRight className="size-4" aria-hidden />}
               Payer {formatFcfa(amount)}
+            </Button>
+          </>
+        )}
+
+        {step === "redirect" && redirectUrl && (
+          <>
+            <DialogHeader>
+              <DialogTitle>Redirection vers FedaPay…</DialogTitle>
+              <DialogDescription>
+                La confirmation est automatique à votre retour : le statut se met à jour dans votre historique (réf. {reference}).
+              </DialogDescription>
+            </DialogHeader>
+            <p className="rounded-xl bg-primary/5 px-4 py-3 text-center font-display text-2xl font-bold text-primary">{formatFcfa(amount)}</p>
+            <Button className="h-11 w-full text-base" onClick={() => window.location.assign(redirectUrl)}>
+              Continuer vers le paiement <ExternalLink className="size-4" aria-hidden />
             </Button>
           </>
         )}

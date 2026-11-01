@@ -20,8 +20,8 @@ bun run dev
 # 5. Service temps réel messagerie/notifications (port 3003, optionnel mais recommandé)
 cd mini-services/chat-service && bun run dev
 
-# 6. Tests de la logique financière
-bun test tests/finance.test.ts
+# 6. Tests (finance + FedaPay)
+bun test
 ```
 
 ## Comptes de démonstration
@@ -47,8 +47,12 @@ Voir `.env.example`. Résumé :
 |---|---|---|
 | `DATABASE_URL` | SQLite locale | `file:/home/z/my-project/db/custom.db` |
 | `SESSION_SECRET` | Signature HMAC des cookies de session | générée dans `.env` |
-| `PAYMENT_WEBHOOK_SECRET` | Signature des webhooks de paiement | générée dans `.env` |
-| `PAYMENT_PROVIDER` | `mock` (simulateur) · `fedapay` (à brancher) | `mock` |
+| `PAYMENT_WEBHOOK_SECRET` | Signature des webhooks du simulateur | générée dans `.env` |
+| `PAYMENT_PROVIDER` | `mock` (simulateur) · `fedapay` (réel) | `mock` |
+| `FEDAPAY_SECRET_KEY` | Clé API FedaPay (`sk_sandbox_…` / `sk_live_…`) | absent → erreur claire |
+| `FEDAPAY_ENVIRONMENT` | `sandbox` · `live` | `sandbox` |
+| `FEDAPAY_WEBHOOK_SECRET` | Secret du endpoint webhook (`wh_sandbox_…`) | absent → webhooks refusés |
+| `PUBLIC_BASE_URL` | URL publique (callback FedaPay après paiement) | absent → callback omis |
 | `RESEND_API_KEY` | Emails transactionnels (optionnel) | absent → logs |
 | `NEXT_PUBLIC_APP_NAME` | Nom affiché | `LocaBénin` |
 
@@ -82,7 +86,7 @@ docs/                  → DECISIONS.md, ROUTES.md, DATABASE.md, DESIGN_SYSTEM.m
 
 ## Limitations connues de la sandbox (assumées, documentées)
 
-1. **Paiement** : simulateur Mobile Money (`PAYMENT_PROVIDER=mock`) qui emprunte le VRAI pipeline webhook signé. Branchement FedaPay/KkiaPay : implémenter `PaymentProvider` dans `src/lib/payments.ts`.
+1. **Paiement** : deux providers derrière la même interface `PaymentProvider` (`src/lib/payments.ts`) — simulateur Mobile Money (`mock`, emprunte le VRAI pipeline webhook signé) et **FedaPay réel** (`src/lib/fedapay.ts` + `FedaPayProvider` : création de transaction API v1, caisse hébergée, vérification de signature `X-FEDAPAY-SIGNATURE` conforme au SDK officiel). Activation : poser les variables `FEDAPAY_*` et `PAYMENT_PROVIDER=fedapay` — aucun changement de code. KkiaPay : même interface.
 2. **SMS/WhatsApp/Email** : canaux abstraits (`NotificationChannel`) qui journalisent. Clés Resend/SMS en production.
 3. **Base de données** : SQLite + contrôle d'accès applicatif. Migration Supabase PostgreSQL + RLS décrite dans docs/DATABASE.md.
 4. **Routage** : SPA sur `/` (contrainte du bac à sable) via routeur hash ; migration routes App Router décrite dans docs/ROUTES.md.
@@ -93,6 +97,6 @@ docs/                  → DECISIONS.md, ROUTES.md, DATABASE.md, DESIGN_SYSTEM.m
 
 1. Supabase : PostgreSQL + Auth + Storage ; importer le schéma (voir docs/DATABASE.md, section migration) et activer RLS.
 2. Vercel : variables `.env` de production, `PAYMENT_PROVIDER=fedapay`, domaines images.
-3. FedaPay : clés live + URL webhook `https://votre-domaine/api/webhooks/payment/fedapay`.
+3. FedaPay : compte validé → `FEDAPAY_SECRET_KEY` (live), `FEDAPAY_ENVIRONMENT=live`, `FEDAPAY_WEBHOOK_SECRET`, `PUBLIC_BASE_URL=https://votre-domaine`, puis endpoint webhook `https://votre-domaine/api/webhooks/payment/fedapay` (événements : transaction.approved, declined, canceled, expired, refunded). Le simulateur se désactive seul.
 4. Resend : domaine vérifié (SPF/DKIM).
 5. Vérifier : `/api/health`, un paiement test, un retrait test, puis activer les vrais canaux SMS.

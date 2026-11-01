@@ -20,7 +20,8 @@ Copier `.env.example` → configurer sur Vercel (toutes obligatoires sauf mentio
 - `DATABASE_URL` — chaîne Supabase PostgreSQL (pooler : port 6543 en serverless).
 - `SESSION_SECRET` — ≥ 32 caractères aléatoires (`head -c 32 /dev/urandom | base64`).
 - `PAYMENT_WEBHOOK_SECRET` — secret partagé HMAC des webhooks.
-- `PAYMENT_PROVIDER=fedapay` + `FEDAPAY_PUBLIC_KEY` / `FEDAPAY_SECRET_KEY` / `FEDAPAY_WEBHOOK_SECRET` (à connecter quand décidé).
+- `PAYMENT_PROVIDER=fedapay` + `FEDAPAY_SECRET_KEY` (clé live `sk_live_…`) + `FEDAPAY_ENVIRONMENT=live` + `FEDAPAY_WEBHOOK_SECRET` (secret du endpoint webhook) + `PUBLIC_BASE_URL` (URL publique, callback client).
+- Simulation démo possible en gardant `PAYMENT_PROVIDER=mock` (le simulateur se désactive seul dès que `fedapay` est actif).
 - `RESEND_API_KEY`, `RESEND_FROM` (optionnel en démo, requis pour les emails réels).
 - `AT_USERNAME` / `AT_API_KEY`, `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` (SMS/WhatsApp réels).
 - `NEXT_PUBLIC_APP_NAME`.
@@ -35,10 +36,12 @@ Copier `.env.example` → configurer sur Vercel (toutes obligatoires sauf mentio
 - [ ] Créer les buckets Storage : `media` (public), `kyc` (privé, URLs signées 5 min).
 - [ ] Migrer les données de démo si souhaité (sinon seed production = géo + tarifs + admin uniquement).
 
-### Paiements (quand l'agrégateur sera connecté)
-- [ ] Compte FedaPay live validé (KYC entreprise) ; clés live dans Vercel.
-- [ ] URL webhook : `https://<domaine>/api/webhooks/payment/fedapay` ; secret configuré des deux côtés.
-- [ ] Test bout-en-bout : initiation MTN MoMo → webhook signé → ledger équilibré → quittance PDF.
+### Paiements (FedaPay — implémentation prête, activation par variables)
+- [ ] Compte FedaPay live validé (KYC entreprise) ; `FEDAPAY_SECRET_KEY` (live) et `FEDAPAY_ENVIRONMENT=live` dans Vercel.
+- [ ] `PUBLIC_BASE_URL=https://<domaine>` (callback client après paiement).
+- [ ] Endpoint webhook : `https://<domaine>/api/webhooks/payment/fedapay` ; `FEDAPAY_WEBHOOK_SECRET` configuré des deux côtés (Workbench → Webhooks → Click to reveal).
+- [ ] S'abonner aux événements : `transaction.approved`, `transaction.declined`, `transaction.canceled`, `transaction.expired`, `transaction.refunded` (les autres sont ignorés avec réponse 200).
+- [ ] Test bout-en-bout : initiation MTN MoMo → caisse hébergée → webhook signé (HMAC `t.s` SHA-256, tolérance 300 s) → ledger équilibré → quittance PDF.
 - [ ] Test d'idempotence : rejouer un webhook → aucune double écriture (`PaymentEvent`).
 
 ### Emails / SMS
